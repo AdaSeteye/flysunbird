@@ -8,7 +8,7 @@
   <div class="hrow">
     <div>
       <h1>Payment &amp; Ticket configuration</h1>
-      <div class="sub">Cybersource keys and ticket storage are set in the backend <code>.env</code>. This page shows status and placeholder names.</div>
+      <div class="sub">Stripe and ticket storage are set in the backend <code>.env</code>. This page shows status and placeholder names.</div>
     </div>
     <div class="actions">
       <button class="btn" onclick="loadStatus()">Refresh status</button>
@@ -23,22 +23,12 @@
   </div>
 
   <div class="card">
-    <div style="font-weight:900">Cybersource (backend .env)</div>
-    <div class="sub">Set these in your backend <code>.env</code>. Use placeholders below; replace with your real values for production.</div>
+    <div style="font-weight:900">Stripe (backend .env)</div>
+    <div class="sub">Set these in your backend <code>.env</code>. Get keys from <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener">Stripe Dashboard → API keys</a>. Webhook secret from Developers → Webhooks.</div>
     <div class="hr"></div>
-    <pre class="k" style="overflow:auto;font-size:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:12px;margin:0;"># Cybersource REST (HTTP Signature)
-CYBS_ENV=test
-CYBS_HOST=apitest.cybersource.com
-CYBS_MERCHANT_ID=your_merchant_id_here
-CYBS_KEY_ID=your_key_id_here
-CYBS_SECRET_KEY_B64=your_base64_encoded_secret_here
-# Set true to skip real API call and return mock success (for dev when you get 404)
-CYBS_SANDBOX=false
-
-# Microform / Flex (allowed origins for capture context)
-CYBS_TARGET_ORIGINS=https://localhost:8080,http://localhost:8080
-CYBS_CLIENT_VERSION=0.34
-CYBS_ALLOWED_CARD_NETWORKS=VISA,MASTERCARD</pre>
+    <pre class="k" style="overflow:auto;font-size:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:12px;margin:0;"># Stripe (Pay with Card – redirect to Checkout)
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...</pre>
   </div>
 
   <div class="card">
@@ -103,11 +93,10 @@ API_PUBLIC_URL=http://localhost:8000</pre>
       if (!res.ok) throw new Error(await res.text());
       const d = await res.json();
       el.innerHTML = '<div class="grid">' +
-        '<div class="card" style="margin:0"><div class="sub">Cybersource</div><div><span class="badge ' + (d.cybersourceConfigured?'ok':'warn') + '">' + (d.cybersourceConfigured ? "Configured" : "Not configured") + '</span></div></div>' +
+        '<div class="card" style="margin:0"><div class="sub">Stripe</div><div><span class="badge ' + (d.stripeConfigured?'ok':'warn') + '">' + (d.stripeConfigured ? "Configured" : "Not configured") + '</span></div></div>' +
         '<div class="card" style="margin:0"><div class="sub">Client base URL</div><div><span class="badge ' + (d.clientBaseUrlSet?'ok':'warn') + '">' + (d.clientBaseUrlSet ? "Set" : "Not set") + '</span></div></div>' +
         '<div class="card" style="margin:0"><div class="sub">API public URL (ticket QR)</div><div><span class="badge ' + (d.apiPublicUrlSet?'ok':'warn') + '">' + (d.apiPublicUrlSet ? "Set" : "Not set") + '</span></div></div>' +
         '<div class="card" style="margin:0"><div class="sub">Ticket directory</div><div class="sub">' + (d.ticketLocalDir || "—") + '</div></div>' +
-        '<div class="card" style="margin:0"><div class="sub">Cybersource env</div><div class="sub">' + (d.cybsEnv || "test") + '</div></div>' +
         '</div>';
     } catch (e) {
       el.innerHTML = "<span class='badge bad'>Error: " + (e.message || String(e)) + "</span>";

@@ -1,6 +1,6 @@
 # FlySunbird – Render Blueprint
 # Deploy: push to GitHub, then in Render Dashboard: New → Blueprint → connect repo.
-# Set REDIS_URL (e.g. from Upstash), SECRET_KEY, CLIENT_BASE_URL, API_PUBLIC_URL, and optional Cybersource/email in the Dashboard.
+# Set REDIS_URL (e.g. from Upstash), SECRET_KEY, CLIENT_BASE_URL, API_PUBLIC_URL, STRIPE_* and optional email in the Dashboard.
 
 databases:
   - name: flysunbird-db
@@ -27,6 +27,10 @@ services:
       - key: API_PUBLIC_URL
         sync: false
       - key: CORS_ORIGINS
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
         sync: false
       - key: ENV
         value: production

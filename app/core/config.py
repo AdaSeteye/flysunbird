@@ -41,22 +41,10 @@ class Settings(BaseSettings):
     GCS_BUCKET_NAME: str = ""
     GOOGLE_APPLICATION_CREDENTIALS: str = ""
 
-    # Cybersource Microform/Flex
-    CYBS_TARGET_ORIGINS: str = "https://localhost:8080"
-    CYBS_CLIENT_VERSION: str = "0.34"
-    CYBS_MICROFORM_JS_URL: str = ""  # optional override
-    CYBS_WEBHOOK_VERIFY: bool = False
-    CYBS_WEBHOOK_PATH: str = ""  # If set, use this path for webhook signature verification (e.g. /api/v1/webhooks/cybersource)
-    CYBS_ALLOWED_CARD_NETWORKS: str = "VISA,MASTERCARD"
-
-
-    # Cybersource (HTTP Signature / REST Payments)
-    CYBS_ENV: str = "test"  # test|prod
-    CYBS_HOST: str = "apitest.cybersource.com"
-    CYBS_MERCHANT_ID: str = ""
-    CYBS_KEY_ID: str = ""
-    CYBS_SECRET_KEY_B64: str = ""
-    CYBS_SANDBOX: bool = False  # If True, skip real Cybersource call and return mock success (for dev when gateway not ready)
+    # Stripe (Checkout redirect)
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_PUBLISHABLE_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""  # For webhook signature verification (e.g. whsec_...)
 
 
 settings = Settings()

@@ -99,7 +99,7 @@ function renderSummary(){
       <div class="line"><div class="k">Phone</div><div class="v">${p0.phone || "—"}</div></div>
       <div class="div"></div>
       <div class="total"><div class="k">Total</div><div class="v">${fmt(total, state.currency)}</div></div>
-      <div class="hint">If your backend is connected, this will submit a Cybersource-ready payload for processing.</div>
+      <div class="hint">Pay with Stripe (redirect) or use Selcom for local/demo.</div>
     </div>
   `;
 }
@@ -137,147 +137,20 @@ if(!state.bookingRef){
   saveState(state);
 }
 
-/* ---------- Cybersource payload helpers ---------- */
-function qsCy(name){
-  return document.querySelector(`[data-cy="${name}"]`);
-}
-
-function valCy(name){
-  const el = qsCy(name);
-  return el ? String(el.value || "").trim() : "";
-}
-
-function onlyDigits(s){ return String(s||"").replace(/\D+/g, ""); }
-
-function normalizeCardNumber(v){
-  return onlyDigits(v);
-}
-
-function normalizeMonth(v){
-  const m = onlyDigits(v).slice(0,2);
-  return m.length === 1 ? `0${m}` : m;
-}
-
-function normalizeYear(v){
-  const y = onlyDigits(v);
-  if(y.length === 2){
-    const nowY = new Date().getFullYear();
-    const prefix = String(nowY).slice(0,2);
-    return `${prefix}${y}`;
-  }
-  return y.slice(0,4);
-}
-
-function buildCybersourcePayload(){
-  const total = calcTotal();
-  // IMPORTANT: If your backend expects the amount in the selected currency, convert here.
-  // Current UI pricing is stored in USD (state.selected.priceUSD). If you charge in TZS,
-  // you should convert USD->TZS before submitting.
-  const amountInCurrency = (state.currency === "USD") ? total : Math.round(total * TZS_RATE);
-
-  const payload = {
-    clientReferenceInformation: { code: state.bookingRef },
-    orderInformation: {
-      amountDetails: {
-        totalAmount: String(amountInCurrency),
-        currency: state.currency
-      },
-      billTo: {
-        firstName: valCy("billTo.firstName"),
-        lastName: valCy("billTo.lastName"),
-        email: valCy("billTo.email"),
-        phoneNumber: valCy("billTo.phoneNumber"),
-        address1: valCy("billTo.address1"),
-        address2: valCy("billTo.address2"),
-        locality: valCy("billTo.locality"),
-        administrativeArea: valCy("billTo.administrativeArea"),
-        postalCode: valCy("billTo.postalCode"),
-        country: valCy("billTo.country")
-      }
-    },
-    paymentInformation: {
-      card: {
-        number: normalizeCardNumber(valCy("card.number")),
-        expirationMonth: normalizeMonth(valCy("card.expirationMonth")),
-        expirationYear: normalizeYear(valCy("card.expirationYear")),
-        securityCode: onlyDigits(valCy("card.securityCode")).slice(0,4)
-      }
-    },
-    // Optional metadata for your backend (not part of Cybersource schema)
-    _meta: {
-      bookingRef: state.bookingRef,
-      booking: state.selected,
-      passengers: state.passengers,
-      currency: state.currency,
-      amountUSD: total
-    }
-  };
-
-  return payload;
-}
-
 function validateRequired(method){
   const form = document.querySelector(`.pay-form[data-method="${method}"]`);
+  if(!form) return { ok:true };
   const req = Array.from(form.querySelectorAll("[data-required='1']"));
   const missing = req.filter(i=> !String(i.value||"").trim());
   if(missing.length){
     missing[0].focus();
     return { ok:false, msg:"Please fill all required payment fields." };
   }
-
-  if(method === "card"){
-    const num = normalizeCardNumber(valCy("card.number"));
-    if(num.length < 12){ return { ok:false, msg:"Card number looks too short." }; }
-
-    const mm = normalizeMonth(valCy("card.expirationMonth"));
-    const yyyy = normalizeYear(valCy("card.expirationYear"));
-    const mInt = parseInt(mm,10);
-    const yInt = parseInt(yyyy,10);
-    if(!(mInt>=1 && mInt<=12) || !(yInt>=2020 && yInt<=2100)){
-      return { ok:false, msg:"Invalid expiry month/year." };
-    }
-  }
-
   return { ok:true };
 }
 
-async function submitCybersource(payload){
-  if(!API_BASE){
-    throw new Error("No API base configured. Set window.FLYSUNBIRD_API_BASE or localStorage['FLYSUNBIRD_API_BASE'].");
-  }
-
-  // You can implement this endpoint in your FastAPI backend.
-  // Expected: backend calls Cybersource and returns { ok:true, status, id, ... }.
-  const url = `${API_BASE}/public/payments/cybersource/charge`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type":"application/json" },
-    body: JSON.stringify(payload)
-  });
-
-  let data = null;
-  try{ data = await res.json(); }catch(_e){}
-
-  if(!res.ok){
-    const msg = (data && (data.detail || data.message)) ? (data.detail || data.message) : `Payment request failed (${res.status}).`;
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
-  }
-  return data || { ok:true };
-}
-
-function prefillBilling(){
-  const p0 = state.passengers && state.passengers[0] ? state.passengers[0] : {};
-  const set = (k,v)=>{ const el = qsCy(k); if(el && !String(el.value||"").trim()) el.value = v || ""; };
-  set("billTo.firstName", p0.first);
-  set("billTo.lastName", p0.last);
-  set("billTo.email", p0.email);
-  set("billTo.phoneNumber", p0.phone);
-  const country = qsCy("billTo.country");
-  if(country && !country.value) country.value = "TZ";
-}
-
 $("#payNow").addEventListener("click", async ()=>{
-  const method = state.paymentMethod || "card";
+  const method = state.paymentMethod || "stripe";
 
   const v = validateRequired(method);
   if(!v.ok){
@@ -285,7 +158,45 @@ $("#payNow").addEventListener("click", async ()=>{
     return;
   }
 
-  // Selcom can keep existing UI-only behavior unless you wire it to a backend.
+  // Stripe Checkout (redirect): create session and redirect to Stripe
+  if(method === "stripe"){
+    try {
+      $("#payNow").disabled = true;
+      $("#payNow").textContent = "Redirecting to Stripe…";
+      if(!API_BASE){
+        alert("API base not configured. Set FLYSUNBIRD_API_BASE.");
+        return;
+      }
+      const res = await fetch(API_BASE + "/public/payments/stripe/create-checkout-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingRef: state.bookingRef,
+          currency: state.currency || "USD"
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok){
+        const msg = (data.detail != null || data.message != null) ? (data.detail || data.message) : "Payment request failed";
+        throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+      }
+      if(data.paymentStatus === "paid" || !data.url){
+        window.location.href = "confirmation.html?ref=" + encodeURIComponent(state.bookingRef || "");
+        return;
+      }
+      window.location.href = data.url;
+      return;
+    } catch(e){
+      console.error(e);
+      alert(e && e.message ? e.message : "Could not start Stripe checkout.");
+    } finally {
+      $("#payNow").disabled = false;
+      $("#payNow").textContent = "Pay now";
+    }
+    return;
+  }
+
+  // Selcom: UI-only / demo (no backend charge).
   if(method === "selcom"){
     state.paymentStatus = "paid";
     state.paidAt = new Date().toISOString();
@@ -294,42 +205,13 @@ $("#payNow").addEventListener("click", async ()=>{
     window.location.href = "confirmation.html?ref=" + encodeURIComponent(state.bookingRef || "");
     return;
   }
-
-  // Card -> prepare Cybersource payload and submit to backend if configured
-  const payload = buildCybersourcePayload();
-
-  try{
-    $("#payNow").disabled = true;
-    $("#payNow").textContent = "Processing…";
-
-    const result = await submitCybersource(payload);
-
-    state.paymentStatus = "paid";
-    state.paidAt = new Date().toISOString();
-    state.paymentProvider = "cybersource";
-    state.paymentResult = result;
-    saveState(state);
-
-    window.location.href = "confirmation.html?ref=" + encodeURIComponent(state.bookingRef || "");
-  }catch(err){
-    console.error(err);
-    const msg = err && err.message ? err.message : "Payment failed. Please try again.";
-    alert(msg);
-    if (typeof msg === "string" && (msg.includes("Booking not found") || msg.includes("404"))) {
-      window.location.href = "booking.html";
-    }
-  }finally{
-    $("#payNow").disabled = false;
-    $("#payNow").textContent = "Pay now";
-  }
 });
 
 (async function init(){
   await hydrateFromUrlOrRedirect();
   if (state.selected && Array.isArray(state.passengers) && state.passengers.length) {
-    prefillBilling();
     renderSummary();
     loadTzsRate().then(() => { if (typeof renderSummary === 'function') renderSummary(); });
-    setMethod(state.paymentMethod || "card");
+    setMethod(state.paymentMethod || "stripe");
   }
 })();

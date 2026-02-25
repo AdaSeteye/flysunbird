@@ -16,7 +16,7 @@
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <div>
           <h2 style="margin:0 0 6px;font-weight:900">Payment</h2>
-          <div class="hint">Choose your payment method (Cybersource Card or Selcom), then complete checkout.</div>
+          <div class="hint">Choose your payment method (Stripe or Selcom), then complete checkout.</div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <button class="btn" id="backPassengers" type="button">Back to passengers</button>
@@ -27,8 +27,8 @@
       <div class="pay-grid" style="margin-top:14px">
         <div class="card" style="padding:16px">
           <div class="method-row">
-            <div class="method active" data-method="card" role="button" tabindex="0">
-              <div class="t">💳 Credit / Debit Card (Cybersource)</div>
+            <div class="method active" data-method="stripe" role="button" tabindex="0">
+              <div class="t">💳 Pay with Card (Stripe)</div>
               <div class="d"></div>
             </div>
             <div class="method" data-method="selcom" role="button" tabindex="0">
@@ -37,90 +37,9 @@
             </div>
           </div>
 
-          <!-- CARD / CYBERSOURCE -->
-          <div class="pay-form" data-method="card" style="margin-top:14px">
-            <div class="field-grid">
-              <!-- BILLING (required by Cybersource orderInformation.billTo) -->
-              <div class="field">
-                <label>First name</label>
-                <input class="input" type="text" placeholder="First name" data-required="1" data-cy="billTo.firstName">
-              </div>
-              <div class="field">
-                <label>Last name</label>
-                <input class="input" type="text" placeholder="Last name" data-required="1" data-cy="billTo.lastName">
-              </div>
-              <div class="field" style="grid-column:1/-1">
-                <label>Email</label>
-                <input class="input" type="email" placeholder="name@email.com" data-required="1" data-cy="billTo.email">
-              </div>
-              <div class="field" style="grid-column:1/-1">
-                <label>Phone</label>
-                <input class="input" type="tel" placeholder="+255 ..." data-required="1" data-cy="billTo.phoneNumber">
-              </div>
-              <div class="field" style="grid-column:1/-1">
-                <label>Billing address</label>
-                <input class="input" type="text" placeholder="Address line 1" data-required="1" data-cy="billTo.address1">
-              </div>
-              <div class="field" style="grid-column:1/-1">
-                <label>Address line 2 (optional)</label>
-                <input class="input" type="text" placeholder="Apartment, suite, etc." data-cy="billTo.address2">
-              </div>
-              <div class="field">
-                <label>City</label>
-                <input class="input" type="text" placeholder="City" data-required="1" data-cy="billTo.locality">
-              </div>
-              <div class="field">
-                <label>State / Region</label>
-                <input class="input" type="text" placeholder="Region" data-required="1" data-cy="billTo.administrativeArea">
-              </div>
-              <div class="field">
-                <label>Postal code</label>
-                <input class="input" type="text" placeholder="Postal code" data-required="1" data-cy="billTo.postalCode">
-              </div>
-              <div class="field">
-                <label>Country</label>
-                <select class="input select" data-required="1" data-cy="billTo.country">
-                  <option value="" disabled selected>Select country</option>
-                  <option value="TZ">Tanzania</option>
-                  <option value="KE">Kenya</option>
-                  <option value="UG">Uganda</option>
-                  <option value="RW">Rwanda</option>
-                  <option value="ET">Ethiopia</option>
-                  <option value="ZA">South Africa</option>
-                  <option value="AE">United Arab Emirates</option>
-                  <option value="US">United States</option>
-                  <option value="GB">United Kingdom</option>
-                </select>
-              </div>
-
-              <div class="div" style="grid-column:1/-1"></div>
-
-              <!-- CARD (required by Cybersource paymentInformation.card) -->
-              <div class="field" style="grid-column:1/-1">
-                <label>Name on card</label>
-                <input class="input" type="text" placeholder="Full name" data-required="1" data-cy="card.name">
-              </div>
-              <div class="field" style="grid-column:1/-1">
-                <label>Card number</label>
-                <input class="input" inputmode="numeric" autocomplete="cc-number" placeholder="1234 5678 9012 3456" data-required="1" data-cy="card.number">
-              </div>
-              <div class="field">
-                <label>Expiry month</label>
-                <input class="input" inputmode="numeric" autocomplete="cc-exp-month" placeholder="MM" data-required="1" data-cy="card.expirationMonth">
-              </div>
-              <div class="field">
-                <label>Expiry year</label>
-                <input class="input" inputmode="numeric" autocomplete="cc-exp-year" placeholder="YYYY" data-required="1" data-cy="card.expirationYear">
-              </div>
-              <div class="field">
-                <label>CVC</label>
-                <input class="input" inputmode="numeric" autocomplete="cc-csc" placeholder="123" data-required="1" data-cy="card.securityCode">
-              </div>
-
-              <div class="hint" style="grid-column:1/-1">
-                Your card details should be sent to your backend for Cybersource processing (PCI). This page only prepares the required fields and payload.
-              </div>
-            </div>
+          <!-- STRIPE CHECKOUT (redirect) -->
+          <div class="pay-form" data-method="stripe" style="margin-top:14px">
+            <p class="hint">You will be redirected to Stripe to pay securely. No card details are entered on this page.</p>
           </div>
 
           <!-- SELCOM -->

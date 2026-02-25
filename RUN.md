@@ -26,7 +26,7 @@ So: **one backend**, **one DB**, **one Redis**, **one Celery worker + beat**; th
 | **Time entry (slot)** | A concrete flight on a date: route + date + time + seats left. Created by the **generate_slots** Celery task (every 6h or via "run-now" in Swagger). |
 | **OPS payload** | JSON for the UI: route labels, date, currency, list of slots (start, end, price, seats, flightNo). The UI gets it via `?ops=<base64url>` or from the API. |
 | **Booking** | Created by `POST /api/v1/public/bookings` (timeEntryId, pax, passengers, booker). Gets a `bookingRef`. Hold expires after a few minutes if not paid. |
-| **Payment** | Cybersource (card) via `/public/payments/cybersource/charge`, or **mark paid** by OPS/Admin (no card). |
+| **Payment** | Stripe (card) via redirect to Checkout, or **mark paid** by OPS/Admin. |
 
 ### Data flow (booking journey)
 
@@ -49,7 +49,7 @@ So: **one backend**, **one DB**, **one Redis**, **one Celery worker + beat**; th
    - UI redirects to the payment page with that `bookingRef`.
 
 5. **Payment**  
-   - **Option A:** User pays by card → UI calls `POST /api/v1/public/payments/cybersource/charge` with the Cybersource payload.  
+   - **Option A:** User pays by card → UI redirects to Stripe Checkout; after payment, webhook marks the booking paid.  
    - **Option B:** OPS/Admin marks the booking paid in Swagger or ops console: `POST /api/v1/ops/bookings/{booking_ref}/mark-paid?pilot_email=...`.
 
 6. **After payment**  
@@ -215,7 +215,7 @@ You should see the route, date, and slots. Then:
 2. Fill passengers → **Continue to Payment**  
 3. Fill billing and card (or use Selcom if that UI path is used) → **Pay now**  
 
-If Cybersource is not configured in `.env`, the payment request will fail (e.g. 500). You can still test the rest of the flow and use **Mark paid** in Swagger or the ops console instead (see below).
+If Stripe is not configured in `.env` (`STRIPE_SECRET_KEY`), the “Pay with Card” button will fail (503). You can still test the rest of the flow and use **Mark paid** in Swagger or the ops console instead (see below).
 
 ---
 
@@ -304,7 +304,7 @@ Follow these checks in order. If any step fails, fix it before continuing.
 - Open `http://localhost:8080/booking.html?ops=<opsParam>` (use `opsParam` from step 2).
 - **Check:** You see route, date, and at least one flight. Click **Select** on a flight → passenger page loads.
 - Fill one passenger, click **Continue to Payment**.
-- **Check:** Payment page loads with booking summary. (If Cybersource is not configured, paying by card may fail; you can still use “mark paid” in step 5.)
+- **Check:** Payment page loads with booking summary. (If Stripe is not configured, “Pay with Card” may fail; you can still use “mark paid” in step 5.)
 
 ### 4. Booking UI works (without ops link – direct open)
 
@@ -396,17 +396,17 @@ Refresh. (Admin uses `FSB_API_BASE`, booking uses `FLYSUNBIRD_API_BASE`.)
 3. Go to **Bookings Inbox**  
 4. **Origin** → pick e.g. "Dar es Salaam Airport" → **Choose date** → calendar shows real availability → click a day  
 5. **Choose Inventory Slot** → pick a slot → fill contact + passengers → **Create booking + reserve seats**  
-6. Use **Mark Paid** or copy payment link and complete payment (if Cybersource test is configured).
+6. Use **Mark Paid** or copy payment link and complete payment (if Stripe is configured).
 
 ### 6. Test customer flow
 
 1. Open http://localhost:8090/fly/booking.html  
 2. **From** → e.g. Dar es Salaam Airport → **Next: Choose date** → calendar with real prices → click a day  
 3. **Select** a slot → fill passengers → **Continue to Payment**  
-4. Pay (test card if Cybersource test keys are set) or note `bookingRef` and **Mark Paid** in admin.
+4. Pay (test card if Stripe is configured) or note `bookingRef` and **Mark Paid** in admin.
 
 ### 7. Optional: payment test
 
-If you added Cybersource **test** keys to `.env` (`CYBS_MERCHANT_ID`, `CYBS_KEY_ID`, `CYBS_SECRET_KEY_B64`), the payment page can charge a test card. If the gateway returns 404 (REST Payments not enabled), set **`CYBS_SANDBOX=true`** in `.env` to skip the real call and return mock success so you can test the full flow. Otherwise use **Mark Paid** in the ops console to simulate paid.
+If you added **Stripe** keys to `.env` (`STRIPE_SECRET_KEY`, and for webhook `STRIPE_WEBHOOK_SECRET` from `stripe listen`), the payment page will redirect to Stripe Checkout; use test card 4242 4242 4242 4242. Otherwise use **Mark Paid** in the ops console to simulate paid.
 
 You now have API, slots, admin calendar, customer calendar, draft creation, and payment/mark-paid working as in a real deployment.

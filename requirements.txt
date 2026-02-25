@@ -19,3 +19,4 @@ pillow==10.4.0
 
 # Optional integrations
 google-cloud-storage==2.18.2
+stripe==11.3.0

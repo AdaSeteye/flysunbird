@@ -37,21 +37,42 @@ This guide walks through deploying the FlySunbird API, frontend, and Celery work
    | `CLIENT_BASE_URL` | You set | Same as your Render web URL, e.g. `https://flysunbird-api.onrender.com`. |
    | `API_PUBLIC_URL` | You set | Same, e.g. `https://flysunbird-api.onrender.com`. |
    | `CORS_ORIGINS` | Optional | Same URL if you need CORS (e.g. `https://flysunbird-api.onrender.com`). |
+   | `STRIPE_SECRET_KEY` | You set | For Pay with Card (Stripe). See [Stripe production](#stripe-pay-with-card--production) below. |
+   | `STRIPE_WEBHOOK_SECRET` | You set | From Stripe webhook signing secret. See [Stripe production](#stripe-pay-with-card--production) below. |
    | `SECRET_KEY` | Blueprint | Auto-generated for web; worker gets it from web service. |
    | `DATABASE_URL` | Blueprint | Set from `flysunbird-db` automatically. |
 
    **If the app fails to connect to Postgres**, Render may give a `postgres://` URL. You can override `DATABASE_URL` with the **Internal Database URL** from the database’s **Info** tab, and change the scheme to `postgresql+psycopg2://` (replace `postgres://` with `postgresql+psycopg2://`).
 
-5. **Optional (production)**  
+5. **Stripe (Pay with Card) – production**  
+   To accept card payments via Stripe Checkout on Render:
+
+   - **Stripe Secret Key**  
+     - [Stripe Dashboard](https://dashboard.stripe.com) → **Developers** → **API keys**.  
+     - For production use the **Live** key (`sk_live_...`); for testing in production use the **Test** key (`sk_test_...`).  
+     - In Render → **flysunbird-api** → **Environment** → set `STRIPE_SECRET_KEY` to that value.
+
+   - **Stripe webhook** (so bookings are marked paid after payment):  
+     - Stripe Dashboard → **Developers** → **Webhooks** → **Add endpoint**.  
+     - **Endpoint URL:** `https://<your-render-web-service-url>/api/v1/webhooks/stripe`  
+       (e.g. `https://flysunbird-api.onrender.com/api/v1/webhooks/stripe`).  
+     - **Events to send:** click **Select events** → choose **checkout.session.completed** → **Add endpoint**.  
+     - Open the new endpoint → **Reveal** the **Signing secret** (`whsec_...`).  
+     - In Render → **flysunbird-api** → **Environment** → set `STRIPE_WEBHOOK_SECRET` to that value.
+
+   - **CLIENT_BASE_URL** must be set (step 4) to your public app URL (e.g. `https://flysunbird-api.onrender.com`) so Stripe can redirect customers back to the confirmation page after payment.
+
+   For a short checklist of only what you need to paste in, see **[PRODUCTION_STRIPE.md](PRODUCTION_STRIPE.md)**.
+
+6. **Optional (other production settings)**  
    Add in the Dashboard for the web service (and worker if needed):  
-   - Cybersource: `CYBS_ENV`, `CYBS_HOST`, `CYBS_MERCHANT_ID`, `CYBS_KEY_ID`, `CYBS_SECRET_KEY_B64`, `CYBS_TARGET_ORIGINS` (your Render URL). Set `CYBS_SANDBOX=false` for live payments.  
    - Email: `SMTP_*` or `SENDGRID_API_KEY` + `SENDGRID_FROM_EMAIL`.  
    - Tickets: `TICKET_LOCAL_DIR` (e.g. `./data/tickets`); for GCS, `GCS_BUCKET_NAME` and `GOOGLE_APPLICATION_CREDENTIALS`.
 
-6. **Deploy**  
+7. **Deploy**  
    Save env vars and let Render build and deploy. The first deploy runs migrations and seed via the Docker `entrypoint.sh`.
 
-7. **Use the app**  
+8. **Use the app**  
    - Open `https://<your-web-service-name>.onrender.com` → redirects to `/login.html`.  
    - Log in with a seeded user (emails and default passwords are in `app/seed.py`; change them in production).  
    - The frontend uses the same origin as the API, so no extra API URL configuration is needed.

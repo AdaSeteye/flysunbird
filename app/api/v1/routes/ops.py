@@ -251,7 +251,7 @@ def assign_pilot_to_booking(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("ops", "admin", "superadmin")),
 ):
-    """Assign a pilot to a paid booking's flight (creates PilotAssignment). Use for Cybersource-paid bookings."""
+    """Assign a pilot to a paid booking's flight (creates PilotAssignment)."""
     b = db.query(Booking).filter(Booking.booking_ref == booking_ref).first()
     if not b:
         raise HTTPException(status_code=404, detail="Not found")
@@ -812,20 +812,15 @@ from app.services.settings_service import get_usd_to_tzs_rate, set_usd_to_tzs_ra
 def get_payment_status(user: User = Depends(require_roles("ops","admin","superadmin","finance"))):
     """Return whether payment/ticket config is set (no secrets)."""
     from app.core.config import settings
-    cybs_ok = bool(
-        getattr(settings, "CYBS_MERCHANT_ID", None)
-        and getattr(settings, "CYBS_KEY_ID", None)
-        and getattr(settings, "CYBS_SECRET_KEY_B64", None)
-    )
+    stripe_ok = bool(getattr(settings, "STRIPE_SECRET_KEY", None) and str(getattr(settings, "STRIPE_SECRET_KEY", "") or "").strip())
     client_base = (getattr(settings, "CLIENT_BASE_URL", None) or "").strip()
     api_public = (getattr(settings, "API_PUBLIC_URL", None) or "").strip()
     ticket_dir = getattr(settings, "TICKET_LOCAL_DIR", "") or "./data/tickets"
     return {
-        "cybersourceConfigured": cybs_ok,
+        "stripeConfigured": stripe_ok,
         "clientBaseUrlSet": bool(client_base),
         "apiPublicUrlSet": bool(api_public),
         "ticketLocalDir": ticket_dir,
-        "cybsEnv": getattr(settings, "CYBS_ENV", "test"),
     }
 
 @router.get("/ops/settings/fx-rate")
