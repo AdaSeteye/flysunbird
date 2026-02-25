@@ -1,11 +1,29 @@
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
+
 from celery import Celery
 from celery.signals import worker_ready
 from app.core.config import settings
 
+
+def _redis_url_for_celery(url: str) -> str:
+    """Celery requires ssl_cert_reqs for rediss:// (e.g. Upstash TLS)."""
+    if not url or not url.strip().lower().startswith("rediss://"):
+        return url
+    parsed = urlparse(url)
+    qs = parse_qs(parsed.query)
+    if "ssl_cert_reqs" not in qs:
+        qs["ssl_cert_reqs"] = ["CERT_NONE"]
+        new_query = urlencode(qs, doseq=True)
+        return urlunparse(parsed._replace(query=new_query))
+    return url
+
+
+_redis_url = _redis_url_for_celery(settings.REDIS_URL)
+
 celery = Celery(
     "flysunbird",
-    broker=settings.REDIS_URL,
-    backend=settings.REDIS_URL,
+    broker=_redis_url,
+    backend=_redis_url,
     include=["app.tasks.jobs"],
 )
 
