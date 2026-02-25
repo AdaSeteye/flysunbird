@@ -31,5 +31,16 @@ finally:
     engine.dispose()
 "
 
+# Generate slots once so the booking calendar has slots without waiting for Celery
+echo "[entrypoint] Generating slots..."
+python -c "
+from app.tasks.worker_jobs import generate_slots
+try:
+    generate_slots()
+    print('[entrypoint] Slots generated.')
+except Exception as e:
+    print('[entrypoint] Slot generation warning:', e)
+"
+
 echo "[entrypoint] Starting application..."
 exec "$@"
