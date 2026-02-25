@@ -51,4 +51,6 @@ Open your UI without editing it:
 Seat-hold expiry runs automatically (Celery beat every minute).
 Slot generation runs automatically (every 6 hours) using `slot_rules`.
 
+## Default users (local/dev)
 
+Seeded accounts are defined in `app/seed.py`. Use those emails with the passwords set there (change them in production).

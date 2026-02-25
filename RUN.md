@@ -139,7 +139,7 @@ The seed creates one **route** and one **slot rule**, but **time slots** are cre
 
 1. Open http://localhost:8000/docs  
 2. **Login:** `POST /api/v1/auth/login`  
-   - Body (e.g.): `{"email":"ops@flysunbird.co.tz","password":"ops12345"}`  
+   - Body (e.g.): `{"email":"ops@flysunbird.co.tz","password":"<see app/seed.py>"}`  
    - Copy the `access_token` from the response.  
 3. Click **Authorize**, paste: `Bearer <access_token>`, then Authorize.  
 4. **List slot rules:** `GET /api/v1/ops/slot-rules`  
@@ -265,21 +265,16 @@ To use it:
    python -m http.server 8090
    ```
 2. Open http://localhost:8090/admin-dashboard.html  
-3. Log in (e.g. ops@flysunbird.co.tz / ops12345).  
+3. Log in with a seeded user (emails and default passwords are in `app/seed.py`).  
 4. The console will call the API; set its API base to `http://localhost:8000/api/v1` if it uses `FLYSUNBIRD_API_BASE` (or as configured in the console’s scripts).
 
 From the ops console you can open the **OPS payload** page, pick route and date, get the booking link (`booking.html?ops=...`), and open it in a new tab (use the same origin or ensure the UI is served on 8080 with `FLYSUNBIRD_API_BASE` set as above).
 
 ---
 
-## 8. Default users (from README / seed)
+## 8. Default users (from seed)
 
-- admin@flysunbird.co.tz / admin12345  
-- ops@flysunbird.co.tz / ops12345  
-- finance@flysunbird.co.tz / finance12345  
-- pilot@flysunbird.co.tz / pilot12345  
-
-(Seed uses `@flysunbird.co.tz`; if your seed uses `.local`, use that.)
+Seeded users and their default passwords are defined in `app/seed.py`. Do not commit real passwords; change them after first login in production.
 
 ---
 
@@ -298,7 +293,7 @@ Follow these checks in order. If any step fails, fix it before continuing.
 
 - In Swagger (or a browser): **GET** `/api/v1/public/routes`.
 - **Check:** Response is a list with at least one route; note its `id` (e.g. `route_id`).
-- **Generate slots** so a date has flights: in Swagger, **POST** `/api/v1/auth/login` with `{"email":"ops@flysunbird.co.tz","password":"ops12345"}`, then **Authorize** with the `access_token`, then **GET** `/api/v1/ops/slot-rules` → copy one rule `id` → **POST** `/api/v1/ops/slot-rules/{rule_id}/run-now`.
+- **Generate slots** so a date has flights: in Swagger, **POST** `/api/v1/auth/login` with `{"email":"<seeded-email>","password":"<see app/seed.py>"}`, then **Authorize** with the `access_token`, then **GET** `/api/v1/ops/slot-rules` → copy one rule `id` → **POST** `/api/v1/ops/slot-rules/{rule_id}/run-now`.
 - **Check:** `GET /api/v1/public/ops-link?route_id=<ROUTE_ID>&dateStr=2026-02-07&currency=USD` returns `{"opsParam":"..."}` and the decoded payload has a `slots` array (can be empty if that date has no slots; use a date after “run-now” if needed).
 - **Check:** `GET /api/v1/public/time-entries?route_id=<ROUTE_ID>&dateStr=2026-02-07` returns `{"items":[...]}` with at least one slot (after run-now for that date).
 
@@ -325,7 +320,7 @@ Follow these checks in order. If any step fails, fix it before continuing.
 ### 6. Ops console (optional)
 
 - Serve: `cd flysunbird_ops_plus_backend_CONNECTED_ALL/ops_console` then `python -m http.server 8090`.
-- Open http://localhost:8090/admin-dashboard.html, log in (e.g. ops@flysunbird.co.tz / ops12345). Set the console’s API base to `http://localhost:8000/api/v1` if required.
+- Open http://localhost:8090/admin-dashboard.html, log in with a seeded user (see `app/seed.py`). Set the console’s API base to `http://localhost:8000/api/v1` if required.
 - **Check:** You can open the OPS payload / inventory page, pick route + date, and use “Open Booking” or “Copy Link” to get `booking.html?ops=...` and open it in a new tab; the booking flow works as in step 3.
 
 If all steps pass, the system is working as expected: backend, slots, public API, booking UI (with and without ops link), create booking, and mark paid (and optionally ops console).
@@ -365,7 +360,7 @@ Wait until the API logs show "Uvicorn running" and migrations/seed have run.
 ### 2. Generate slots
 
 - Open **http://localhost:8000/docs**
-- **POST /api/v1/auth/login** → body: `{"email":"ops@flysunbird.co.tz","password":"ops12345"}` → copy `access_token`
+- **POST /api/v1/auth/login** → body: `{"email":"<seeded-email>","password":"<see app/seed.py>"}` → copy `access_token`
 - Click **Authorize** → enter `Bearer <access_token>` → Authorize
 - **GET /api/v1/ops/slot-rules** → copy one rule `id`
 - **POST /api/v1/ops/slot-rules/{rule_id}/run-now** (use that id)
@@ -397,7 +392,7 @@ Refresh. (Admin uses `FSB_API_BASE`, booking uses `FLYSUNBIRD_API_BASE`.)
 ### 5. Test admin flow
 
 1. Open http://localhost:8090/login.html  
-2. API base: `http://localhost:8000/api/v1`, email: `ops@flysunbird.co.tz`, password: `ops12345` → Sign in  
+2. API base: `http://localhost:8000/api/v1`, then sign in with a seeded user (see `app/seed.py`).  
 3. Go to **Bookings Inbox**  
 4. **Origin** → pick e.g. "Dar es Salaam Airport" → **Choose date** → calendar shows real availability → click a day  
 5. **Choose Inventory Slot** → pick a slot → fill contact + passengers → **Create booking + reserve seats**  

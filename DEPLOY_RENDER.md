@@ -53,7 +53,7 @@ This guide walks through deploying the FlySunbird API, frontend, and Celery work
 
 7. **Use the app**  
    - Open `https://<your-web-service-name>.onrender.com` → redirects to `/login.html`.  
-   - Log in with the seeded user (see `app/seed.py`; often `admin` / a default password).  
+   - Log in with a seeded user (emails and default passwords are in `app/seed.py`; change them in production).  
    - The frontend uses the same origin as the API, so no extra API URL configuration is needed.
 
 ---
