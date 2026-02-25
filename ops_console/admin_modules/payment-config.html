@@ -1,0 +1,118 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="../admin_assets/module.css"/>
+</head>
+<body>
+<div class="wrap">
+  <div class="hrow">
+    <div>
+      <h1>Payment &amp; Ticket configuration</h1>
+      <div class="sub">Cybersource keys and ticket storage are set in the backend <code>.env</code>. This page shows status and placeholder names.</div>
+    </div>
+    <div class="actions">
+      <button class="btn" onclick="loadStatus()">Refresh status</button>
+    </div>
+  </div>
+
+  <div class="card" id="statusCard">
+    <div style="font-weight:900">Backend status</div>
+    <div class="sub">Fetched from GET /ops/settings/payment-status (no secrets).</div>
+    <div class="hr"></div>
+    <div id="statusContent">Loading…</div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:900">Cybersource (backend .env)</div>
+    <div class="sub">Set these in your backend <code>.env</code>. Use placeholders below; replace with your real values for production.</div>
+    <div class="hr"></div>
+    <pre class="k" style="overflow:auto;font-size:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:12px;margin:0;"># Cybersource REST (HTTP Signature)
+CYBS_ENV=test
+CYBS_HOST=apitest.cybersource.com
+CYBS_MERCHANT_ID=your_merchant_id_here
+CYBS_KEY_ID=your_key_id_here
+CYBS_SECRET_KEY_B64=your_base64_encoded_secret_here
+# Set true to skip real API call and return mock success (for dev when you get 404)
+CYBS_SANDBOX=false
+
+# Microform / Flex (allowed origins for capture context)
+CYBS_TARGET_ORIGINS=https://localhost:8080,http://localhost:8080
+CYBS_CLIENT_VERSION=0.34
+CYBS_ALLOWED_CARD_NETWORKS=VISA,MASTERCARD</pre>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:900">Ticket storage (backend .env)</div>
+    <div class="sub">PDFs are generated after payment and stored locally or in GCS.</div>
+    <div class="hr"></div>
+    <pre class="k" style="overflow:auto;font-size:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:12px;margin:0;"># Local directory (default)
+TICKET_LOCAL_DIR=./data/tickets
+
+# Optional: Google Cloud Storage
+GCS_BUCKET_NAME=
+GOOGLE_APPLICATION_CREDENTIALS=</pre>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:900">Client base URL</div>
+    <div class="sub">Used for payment links and customer-facing URLs (e.g. confirmation, ticket).</div>
+    <div class="hr"></div>
+    <pre class="k" style="overflow:auto;font-size:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:12px;margin:0;"># Where the booking/payment UI is hosted
+CLIENT_BASE_URL=http://localhost:8080</pre>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:900">API public URL (ticket QR code)</div>
+    <div class="sub">When a ticket PDF is generated, its QR code encodes a URL. Scanning it opens the PDF. Set this to your backend API base (e.g. https://api.flysunbird.co.tz).</div>
+    <div class="hr"></div>
+    <pre class="k" style="overflow:auto;font-size:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:12px;margin:0;"># Backend API base – QR scan will open /api/v1/public/bookings/{ref}/ticket
+API_PUBLIC_URL=http://localhost:8000</pre>
+  </div>
+</div>
+
+<script src="../admin_assets/ops_bookings.js"></script>
+<script>
+  const API_BASE = (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
+
+  async function refreshToken(){
+    var ref = localStorage.getItem("FSB_REFRESH_TOKEN");
+    if (!API_BASE || !ref) return false;
+    try {
+      var r = await fetch(API_BASE + "/auth/refresh?refresh_token=" + encodeURIComponent(ref), { method: "POST", headers: { "Content-Type": "application/json" } });
+      if (!r.ok) return false;
+      var d = await r.json();
+      if (d.access_token) { localStorage.setItem("FSB_TOKEN", d.access_token); if (d.refresh_token) localStorage.setItem("FSB_REFRESH_TOKEN", d.refresh_token); return true; }
+    } catch (e) {}
+    return false;
+  }
+
+  async function loadStatus(){
+    var el = document.getElementById("statusContent");
+    if (!API_BASE) {
+      el.innerHTML = "<span class='sub'>Sign in and set API base to see status.</span>";
+      return;
+    }
+    var token = localStorage.getItem("FSB_TOKEN") || "";
+    if (!token) {
+      el.innerHTML = "<span class='sub'>Sign in to see status.</span>";
+      return;
+    }
+    try {
+      var res = await fetch(API_BASE + "/ops/settings/payment-status", { headers: { "Authorization": "Bearer " + token } });
+      if (res.status === 401 && await refreshToken()) { token = localStorage.getItem("FSB_TOKEN"); res = await fetch(API_BASE + "/ops/settings/payment-status", { headers: { "Authorization": "Bearer " + token } }); }
+      if (!res.ok) throw new Error(await res.text());
+      const d = await res.json();
+      el.innerHTML = '<div class="grid">' +
+        '<div class="card" style="margin:0"><div class="sub">Cybersource</div><div><span class="badge ' + (d.cybersourceConfigured?'ok':'warn') + '">' + (d.cybersourceConfigured ? "Configured" : "Not configured") + '</span></div></div>' +
+        '<div class="card" style="margin:0"><div class="sub">Client base URL</div><div><span class="badge ' + (d.clientBaseUrlSet?'ok':'warn') + '">' + (d.clientBaseUrlSet ? "Set" : "Not set") + '</span></div></div>' +
+        '<div class="card" style="margin:0"><div class="sub">API public URL (ticket QR)</div><div><span class="badge ' + (d.apiPublicUrlSet?'ok':'warn') + '">' + (d.apiPublicUrlSet ? "Set" : "Not set") + '</span></div></div>' +
+        '<div class="card" style="margin:0"><div class="sub">Ticket directory</div><div class="sub">' + (d.ticketLocalDir || "—") + '</div></div>' +
+        '<div class="card" style="margin:0"><div class="sub">Cybersource env</div><div class="sub">' + (d.cybsEnv || "test") + '</div></div>' +
+        '</div>';
+    } catch (e) {
+      el.innerHTML = "<span class='badge bad'>Error: " + (e.message || String(e)) + "</span>";
+    }
+  }
+  loadStatus();
+</script>
+</body></html>

@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlySunbird • Ticket</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css" />
+  <style>
+    .page{max-width:980px;margin:0 auto;padding:24px}
+    .toolbar{display:flex;gap:10px;justify-content:flex-end;margin-bottom:14px}
+    .ticket-sheet{
+      background:#fff;border:1px solid rgba(255,255,255,.12);
+      border-radius:18px;padding:18px;
+    }
+    .ticket-a4{
+      width:210mm; max-width:100%;
+      min-height:297mm;
+      margin:0 auto;
+    }
+    .ticket-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+    .brand{display:flex;gap:10px;align-items:center}
+    .brand-badge{
+      width:42px;height:42px;border-radius:12px;background:rgba(255,255,255,.08);
+      display:grid;place-items:center;font-weight:700
+    }
+    .t-h{font-size:20px;font-weight:700;margin:0}
+    .muted{opacity:.8}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px}
+    .box{border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:12px}
+    .k{font-size:12px;opacity:.8}
+    .v{font-size:14px;font-weight:600;margin-top:6px}
+    .warn{margin-top:12px;padding:10px 12px;border-radius:14px;border:1px dashed rgba(255,255,255,.25);opacity:.9}
+    .qr{
+      width:120px;height:120px;border-radius:14px;border:1px solid rgba(0,0,0,.08);
+      overflow:hidden;display:flex;align-items:center;justify-content:center;background:#fff
+    }
+    .qr canvas,.qr img{max-width:100%;max-height:100%}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="toolbar no-print">
+      <button class="btn" type="button" onclick="history.back()">Back</button>
+      <button class="btn" id="downloadTicketBtn" type="button" style="display:none">Download ticket PDF</button>
+      <button class="btn primary" id="printBtn" type="button">Print / Save PDF</button>
+    </div>
+
+    <div class="ticket-sheet ticket-a4" id="ticketRoot">
+      <div class="ticket-top">
+        <div class="brand">
+          <div class="brand-badge">FS</div>
+          <div>
+            <p class="t-h">Flight Ticket</p>
+            <div class="muted">Booking ref: <b id="tRef">—</b></div>
+            <div class="muted">Status: <b id="tStatus">—</b></div>
+          </div>
+        </div>
+        <div class="qr" id="tQR" title="Scan for ticket PDF"></div>
+      </div>
+
+      <div class="grid">
+        <div class="box">
+          <div class="k">From</div>
+          <div class="v" id="tFrom">—</div>
+        </div>
+        <div class="box">
+          <div class="k">To</div>
+          <div class="v" id="tTo">—</div>
+        </div>
+        <div class="box">
+          <div class="k">Date</div>
+          <div class="v" id="tDate">—</div>
+        </div>
+        <div class="box">
+          <div class="k">Departure / Arrival</div>
+          <div class="v"><span id="tDep">—</span> → <span id="tArr">—</span></div>
+        </div>
+        <div class="box">
+          <div class="k">Flight No.</div>
+          <div class="v" id="tFlight">—</div>
+        </div>
+        <div class="box">
+          <div class="k">Passenger</div>
+          <div class="v" id="tPassenger">—</div>
+        </div>
+      </div>
+
+      <div class="warn" id="tWarn">Ticket details are provided by OPS. If something is blank, OPS has not yet issued the final ticket data.</div>
+    </div>
+  </div>
+
+  <script src="assets/storage.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNc8BA7iA4fTY+8HDuMgGtMDqIvOgWJqeFETE8LfYqU2UrA==" crossorigin="anonymous"></script>
+  <script src="assets/ticket.js"></script>
+</body>
+</html>

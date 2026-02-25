@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlySunbird • Booking</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+
+<body>
+<main class="container">
+    <!-- ======= WIZARD ======= -->
+    <section id="wizard" class="hero">
+      <div class="stepper" id="stepper">
+        <div class="step active"><div class="k">From</div><div class="dot">1</div></div>
+        <div class="step"><div class="k">Passengers</div><div class="dot">2</div></div>
+        <div class="step"><div class="k">Currency</div><div class="dot">3</div></div>
+      </div>
+
+      <div class="controls">
+        <!-- FROM -->
+        <div class="ctrl">
+          <div class="label">From</div>
+          <div id="fromDrop" class="dropdown">
+            <button type="button" class="dropdown-btn" id="fromBtn" aria-haspopup="listbox" aria-expanded="false">
+              <span id="fromLabel">Select</span>
+              <i class="caret" aria-hidden="true"></i>
+            </button>
+            <div class="menu" role="listbox">
+              <div class="item has-sub" data-region="ZANZIBAR">
+                <span>Zanzibar</span>
+                <div class="submenu">
+                  <button class="sub" data-region="ZANZIBAR" data-value="Paje">Paje</button>
+                  <button class="sub" data-region="ZANZIBAR" data-value="Nungwi">Nungwi</button>
+                  <button class="sub" data-region="ZANZIBAR" data-value="Zanzibar Seacliff">Seacliff</button>
+                  <button class="sub" data-region="ZANZIBAR" data-value="Zanzibar Airport">Airport</button>
+                </div>
+              </div>
+              <div class="item has-sub" data-region="DAR">
+                <span>Dar es Salaam</span>
+                <div class="submenu">
+                  <button class="sub" data-region="DAR" data-value="Dar es Salaam Airport">Airport</button>
+                </div>
+              </div>
+              <div class="item" data-region="OTHER">
+                <button class="sub" data-region="OTHER" data-value="Other">Other</button>
+              </div>
+            </div>
+          </div>
+          <div class="hint" style="margin-top:10px">Pick your starting point to unlock available dates.</div>
+        </div>
+
+        <!-- PASSENGERS -->
+        <div class="ctrl">
+          <div class="label">Number of passengers</div>
+          <div id="paxBox" class="stepper-input" style="margin-top:4px">
+            <button type="button" id="decPax" aria-label="Decrease passengers">−</button>
+            <input id="paxTop" type="number" min="1" value="1" inputmode="numeric" aria-label="Passengers">
+            <button type="button" id="incPax" aria-label="Increase passengers">+</button>
+          </div>
+          <div class="hint" style="margin-top:10px">Capacity depends on route. We'll validate automatically.</div>
+        </div>
+
+        <!-- CURRENCY -->
+        <div class="ctrl">
+          <div class="label">Currency</div>
+          <div class="cur-seg" role="tablist" aria-label="Currency">
+            <button type="button" class="cur-btn active" data-cur="USD" role="tab" aria-selected="true">USD</button>
+            <button type="button" class="cur-btn" data-cur="TZS" role="tab" aria-selected="false">TZS</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="preCalActions" style="display:flex;gap:12px;justify-content:flex-end;margin-top:12px;flex-wrap:wrap">
+        <input id="mobileDate" class="input" type="text" placeholder="(Mobile) iPhone date picker" style="display:none; max-width: 360px;" />
+        <button id="btnToCalendar" class="btn primary" disabled>Next: Choose date</button>
+      </div>
+
+      <!-- Calendar -->
+      <div id="calendarBlock" class="card cal-wrap" style="display:none">
+<div class="cal-head">
+          <div class="left">
+            <button class="btn" id="prevBtn" type="button">◀</button>
+            <div class="hint" id="rangeHint"></div>
+          </div>
+          <div class="right">
+            <button class="btn" id="nextBtn" type="button">▶</button>
+          </div>
+        </div>
+
+        <div class="cal-body">
+          <div class="month" id="m1"></div>
+          <div class="month" id="m2"></div>
+        </div>
+      </div>
+
+      
+    </section>
+
+    <!-- ======= RESULTS ======= -->
+    <section id="resultsSection" style="display:none;margin-top:18px">
+      <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;padding:16px">
+        <div><div class="hint" id="selSummary"></div></div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn" id="changeDate" type="button">Change date</button>
+        </div>
+      </div>
+
+      <div class="list" id="results"></div>
+      <div class="hint" style="margin-top:10px">Selecting a time will take you to Passenger details.</div>
+    </section>
+  </main>
+
+
+  <script src="assets/storage.js"></script>
+  <script src="assets/ui-datewheel.js"></script>
+  <script src="assets/ui-datepicker.js"></script>
+  <script src="assets/booking.js"></script>
+</body>
+</html>

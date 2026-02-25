@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlySunbird • Passenger details</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css" />
+  <link rel="stylesheet" href="assets/ui-datepicker.css" />
+</head>
+
+<body>
+<main class="container">
+    <section class="hero">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+        <div>
+          <h2 style="margin:0 0 6px;font-weight:900">Passenger details</h2>
+          <div class="hint">
+            Age is removed (no auto-calculator). Date of birth uses dropdowns (Day / Month / Year) for consistent behavior.
+          </div>
+        </div>
+        <div class="pill" id="progress">0 / 0 passenger(s) completed</div>
+      </div>
+
+      <div class="form-grid" style="margin-top:14px">
+        <div class="card form-card">
+          <div class="pax-list" id="paxList"></div>
+
+          
+
+          <div class="terms-container" id="termsBlock" style="margin-top:12px">
+            <label class="terms-label" for="agreeTerms">
+              <input type="checkbox" id="agreeTerms" />
+              <span>
+                I agree to the
+                <a href="terms-and-conditions.html" target="_blank" rel="noopener">Terms &amp; Conditions</a>
+              </span>
+            </label>
+            <div class="hint" style="margin-top:6px">Required to continue. Your acceptance is logged with a timestamp.</div>
+          </div>
+<div class="actions-row">
+            <button class="btn" id="addPassenger" type="button">+ Add passenger</button>
+            <div style="flex:1"></div>
+            <button class="btn" id="backBooking" type="button">Back</button>
+            <button class="btn primary" id="toPayment" type="button" disabled>Continue to Payment</button>
+          </div>
+          <div class="hint" style="margin-top:10px">
+            You can add passenger forms up to the number of passengers chosen on the booking page.
+          </div>
+        </div>
+
+        <aside class="summary" id="summary"></aside>
+      </div>
+    </section>
+  </main>
+<script>
+    window.COUNTRIES = ["Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cambodia", "Cameroon", "Canada", "Cape Verde", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo (Congo-Brazzaville)", "Costa Rica", "Côte d’Ivoire", "Croatia", "Cuba", "Cyprus", "Czechia", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "DR Congo", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Korea", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "São Tomé and Príncipe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Korea", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"];
+  </script>
+  
+
+  <script src="assets/storage.js"></script>
+  <script src="assets/ui-datewheel.js"></script>
+  <script src="assets/ui-datepicker.js"></script>
+  <script src="assets/passenger.js"></script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+
+/* Popup date picker (booking-grade, minimal, consistent with existing UI) */
+.dp-overlay{
+  position:fixed; inset:0; background:rgba(0,0,0,.45);
+  display:flex; align-items:center; justify-content:center;
+  padding:18px; z-index:9999;
+}
+.dp-modal{
+  width:min(420px, 100%);
+  background:#fff;
+  border-radius:16px;
+  border:1px solid rgba(0,0,0,.08);
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+  overflow:hidden;
+  font-family:inherit;
+}
+.dp-head{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 14px 10px;
+  border-bottom:1px solid rgba(0,0,0,.06);
+}
+.dp-title{font-weight:800; letter-spacing:-.02em; font-size:14px;}
+.dp-x{
+  width:34px; height:34px; border-radius:12px;
+  border:1px solid rgba(0,0,0,.10); background:#fff; cursor:pointer;
+}
+.dp-nav{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px;
+}
+.dp-month{font-weight:800}
+.dp-navbtn{
+  width:34px; height:34px; border-radius:12px;
+  border:1px solid rgba(0,0,0,.10); background:#fff; cursor:pointer;
+  font-size:18px;
+}
+.dp-dow{
+  display:grid; grid-template-columns:repeat(7,1fr);
+  gap:6px; padding:0 14px 8px;
+  color:rgba(0,0,0,.55); font-weight:700; font-size:12px;
+}
+.dp-grid{
+  display:grid; grid-template-columns:repeat(7,1fr);
+  gap:6px; padding:0 14px 14px;
+}
+.dp-cell{height:40px; border-radius:12px;}
+.dp-blank{background:transparent;}
+.dp-day{
+  border:1px solid rgba(0,0,0,.08);
+  background:#fff; cursor:pointer; font-weight:700;
+}
+.dp-day:hover{box-shadow:0 0 0 4px rgba(171,24,60,.10); border-color: rgba(171,24,60,.55);}
+.dp-day.is-selected{background:#111; color:#fff; border-color:#111; box-shadow:none;}
+.dp-day.is-disabled{opacity:.35; cursor:not-allowed;}
+.dp-foot{
+  display:flex; gap:10px; justify-content:flex-end;
+  padding:12px 14px 14px;
+  border-top:1px solid rgba(0,0,0,.06);
+}
+.dp-btn{
+  height:38px; padding:0 14px; border-radius:12px;
+  border:1px solid rgba(0,0,0,.10); background:#fff; cursor:pointer; font-weight:800;
+}
+.dp-btn-primary{background:#111; color:#fff; border-color:#111;}

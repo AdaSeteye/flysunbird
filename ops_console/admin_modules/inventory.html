@@ -1,0 +1,152 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="../admin_assets/module.css"/>
+</head>
+<body>
+<div class="wrap">
+  <div class="hrow">
+    <div>
+      <h1>Inventory (Ops)</h1>
+      <div class="sub">API slots from the backend. Edit price or seats per slot when needed; unchanged values stay as-is.</div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="button" data-label="Refresh" onclick="refreshWithFeedback(this)">Refresh</button>
+    </div>
+  </div>
+
+  <div id="apiSection" class="card">
+    <div class="hrow">
+      <div style="font-weight:900">API slots (from backend)</div>
+      <div class="actions">
+        <label>Date</label>
+        <input id="apiDate" type="date"/>
+        <button class="btn" type="button" data-label="Load" onclick="refreshWithFeedback(this)">Load</button>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <div style="overflow:auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date</th><th>Route</th><th>Time</th><th>Seats</th><th>Price (USD)</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="apiTbody"></tbody>
+      </table>
+    </div>
+    <div id="apiMsg" class="sub" style="margin-top:8px"></div>
+  </div>
+</div>
+
+<script src="../admin_assets/ops_inventory.js"></script>
+<script>
+  async function refreshWithFeedback(btn){
+    if(btn){ btn.disabled=true; btn.textContent='Loading…'; }
+    try { await render(); } finally { if(btn){ btn.disabled=false; btn.textContent=btn.dataset.label||'Refresh'; } }
+  }
+  function effectivePriceUsd(t) {
+    if (t.override_price_usd != null && t.override_price_usd > 0) return t.override_price_usd;
+    if (t.base_price_usd != null && t.base_price_usd > 0) return t.base_price_usd;
+    return t.price_usd || 0;
+  }
+
+  async function editPriceApiById(id) {
+    const t = (window.__API_ROWS || []).find(r => r.id === id);
+    if (!t) return;
+    const cur = effectivePriceUsd(t);
+    const v = prompt("Override price (USD) for this slot:", String(cur));
+    if (v === null) return;
+    const price = parseInt(v, 10);
+    if (!price || price < 1) return alert("Enter a valid price (e.g. 298).");
+    const payload = {
+      route_id: t.route_id,
+      date_str: t.date_str,
+      start: t.start,
+      end: t.end,
+      price_usd: t.price_usd,
+      price_tzs: t.price_tzs ?? null,
+      seats_available: t.seats_available,
+      flight_no: t.flight_no || "FSB",
+      cabin: t.cabin || "Economy",
+      base_price_usd: t.base_price_usd ?? 0,
+      base_price_tzs: t.base_price_tzs ?? null,
+      override_price_usd: price,
+      override_price_tzs: null
+    };
+    try {
+      await OpsInventory.patchRemote(t.id, payload);
+      document.getElementById('apiMsg').textContent = 'Price updated to $' + price + ' USD.';
+      setTimeout(function(){ document.getElementById('apiMsg').textContent = ''; }, 3000);
+      render();
+    } catch (e) {
+      alert(e.message || 'Failed to update price');
+    }
+  }
+
+  async function editSeatsApiById(id) {
+    const t = (window.__API_ROWS || []).find(r => r.id === id);
+    if (!t) return;
+    const cur = Number(t.seats_available || 0);
+    const v = prompt("Seats available for this slot (leave unchanged = " + cur + "):", String(cur));
+    if (v === null) return;
+    const seats = parseInt(v, 10);
+    if (seats < 0) return alert("Seats cannot be negative.");
+    const payload = {
+      route_id: t.route_id,
+      date_str: t.date_str,
+      start: t.start,
+      end: t.end,
+      price_usd: t.price_usd,
+      price_tzs: t.price_tzs ?? null,
+      seats_available: seats,
+      flight_no: t.flight_no || "FSB",
+      cabin: t.cabin || "Economy",
+      base_price_usd: t.base_price_usd ?? 0,
+      base_price_tzs: t.base_price_tzs ?? null,
+      override_price_usd: t.override_price_usd ?? null,
+      override_price_tzs: t.override_price_tzs ?? null
+    };
+    try {
+      await OpsInventory.patchRemote(t.id, payload);
+      document.getElementById('apiMsg').textContent = 'Seats updated to ' + seats + '.';
+      setTimeout(function(){ document.getElementById('apiMsg').textContent = ''; }, 3000);
+      render();
+    } catch (e) {
+      alert(e.message || 'Failed to update seats');
+    }
+  }
+
+  async function render() {
+    const dateStr = document.getElementById('apiDate').value || new Date().toISOString().slice(0,10);
+    const tbody = document.getElementById('apiTbody');
+    try {
+      const rows = await OpsInventory.listRemote(dateStr);
+      if (!rows.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="sub">No slots for this date. Try another date or run slot generation.</td></tr>';
+      } else {
+        window.__API_ROWS = rows;
+        tbody.innerHTML = rows.map(t => {
+          const p = effectivePriceUsd(t);
+          const overrideNote = (t.override_price_usd && t.override_price_usd > 0) ? ' <span class="sub">(override)</span>' : '';
+          const idEsc = (t.id||'').replace(/"/g,'&quot;');
+          return `<tr>
+            <td>${(t.date_str||'').replace(/</g,'&lt;')}</td>
+            <td>${(t.route_id||'').replace(/</g,'&lt;')}</td>
+            <td>${(t.start||'')} - ${(t.end||'')}</td>
+            <td><span class="pill">${Number(t.seats_available||0)}</span></td>
+            <td>$${p}${overrideNote}</td>
+            <td><button class="btn small" onclick="editPriceApiById('${idEsc}')">Edit price</button> <button class="btn small" onclick="editSeatsApiById('${idEsc}')">Edit seats</button></td>
+          </tr>`;
+        }).join('');
+      }
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="6" class="sub">Could not load. Sign in from login page.</td></tr>';
+    }
+    document.getElementById('apiDate').value = dateStr;
+  }
+
+  document.getElementById('apiDate').value = new Date().toISOString().slice(0,10);
+  render();
+</script>
+</body></html>

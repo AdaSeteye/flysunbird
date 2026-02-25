@@ -1,0 +1,51 @@
+# FlySunbird – Render Blueprint
+# Deploy: push to GitHub, then in Render Dashboard: New → Blueprint → connect repo.
+# Set REDIS_URL (e.g. from Upstash), SECRET_KEY, CLIENT_BASE_URL, API_PUBLIC_URL, and optional Cybersource/email in the Dashboard.
+
+databases:
+  - name: flysunbird-db
+    plan: free
+    databaseName: flysunbird
+
+services:
+  - type: web
+    runtime: docker
+    name: flysunbird-api
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: flysunbird-db
+          property: connectionString
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: CLIENT_BASE_URL
+        sync: false
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: ENV
+        value: production
+
+  - type: worker
+    runtime: docker
+    name: flysunbird-celery
+    dockerCommand: celery -A app.tasks.celery_app worker --beat -l info
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: flysunbird-db
+          property: connectionString
+      - key: REDIS_URL
+        sync: false
+      - key: SECRET_KEY
+        fromService:
+          type: web
+          name: flysunbird-api
+          envVarKey: SECRET_KEY
+      - key: ENV
+        value: production

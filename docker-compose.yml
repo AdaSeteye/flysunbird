@@ -1,0 +1,70 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: flysunbird
+      POSTGRES_USER: flysunbird
+      POSTGRES_PASSWORD: flysunbird
+    ports:
+    - 5432:5432
+    volumes:
+    - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U flysunbird -d flysunbird
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7
+    ports:
+    - 6379:6379
+  mailhog:
+    image: mailhog/mailhog
+    ports:
+    - 8025:8025
+    - 1025:1025
+  api:
+    build: .
+    env_file: .env
+    environment:
+      # Use compose service name so migrations run in the same DB as the one in the db container
+      DATABASE_URL: postgresql://flysunbird:flysunbird@db:5432/flysunbird
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mailhog:
+        condition: service_started
+    ports:
+    - 8000:8000
+  worker:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://flysunbird:flysunbird@db:5432/flysunbird
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mailhog:
+        condition: service_started
+    command: bash -lc "python wait_for_db.py && celery -A app.tasks.celery_app worker -l info"
+  beat:
+    build: .
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://flysunbird:flysunbird@db:5432/flysunbird
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      mailhog:
+        condition: service_started
+    command: bash -lc "python wait_for_db.py && celery -A app.tasks.celery_app beat -l info"
+volumes:
+  pgdata: null

@@ -1,0 +1,119 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="../admin_assets/module.css"/>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hrow">
+      <div>
+        <h1>Currency / FX</h1>
+        <div class="sub">Exchange rate (TZS per USD) is stored in the backend and used for new slots and TZS display.</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:900">TZS per USD</div>
+      <div class="hr"></div>
+      <div class="row">
+        <div><label>TZS per USD</label><input id="tzs" type="number" min="1" step="1" placeholder="e.g. 2450"/></div>
+      </div>
+      <div class="actions" style="margin-top:10px">
+        <button class="btn primary" onclick="save()">Save</button>
+        <span id="msg" class="sub" style="margin-left:12px"></span>
+      </div>
+    </div>
+
+    <div class="card" id="slotRulesCard">
+      <div style="font-weight:900">Slot rules (price &amp; capacity for new slots)</div>
+      <div class="sub">Edit when needed. Values you don't change stay as they are. Affects only future slots generated from each rule; existing slots keep their current values unless overridden in Inventory.</div>
+      <div class="hr"></div>
+      <div id="slotRulesContent">Loading…</div>
+    </div>
+  </div>
+
+  <script src="../admin_assets/ops_api.js"></script>
+  <script>
+    async function loadFxRate() {
+      try {
+        const data = await OpsApi.fetch("GET", "/ops/settings/fx-rate");
+        document.getElementById("tzs").value = data.usdToTzs ?? 2450;
+      } catch (e) {
+        document.getElementById("tzs").value = 2450;
+        document.getElementById("msg").textContent = "Could not load (using 2450). Sign in if needed.";
+      }
+    }
+    async function save() {
+      const tzs = parseInt(document.getElementById("tzs").value, 10);
+      if (!tzs || tzs < 1) return alert("Enter a valid TZS per USD (e.g. 2450).");
+      try {
+        const data = await OpsApi.fetch("POST", "/ops/settings/fx-rate?usdToTzs=" + tzs);
+        document.getElementById("msg").textContent = "Saved: " + data.usdToTzs + " TZS per USD";
+        setTimeout(() => { document.getElementById("msg").textContent = ""; }, 3000);
+      } catch (e) {
+        alert(e.message || "Failed to save");
+      }
+    }
+
+    async function loadSlotRules() {
+      const el = document.getElementById("slotRulesContent");
+      try {
+        const rules = await OpsApi.fetch("GET", "/ops/slot-rules");
+        if (!rules.length) {
+          el.innerHTML = '<div class="sub">No slot rules. Run seed or create rules via API.</div>';
+          return;
+        }
+        el.innerHTML = rules.map(r => {
+          const idEsc = (r.id||'').replace(/"/g,'&quot;');
+          const timesVal = (r.times||'09:00,11:00,13:00,16:00').replace(/"/g,'&quot;');
+          return `
+          <div class="row" style="align-items:center;margin-bottom:12px;gap:16px;flex-wrap:wrap">
+            <span><b>${(r.route_id||r.id||'').replace(/</g,'&lt;')}</b></span>
+            <span><label class="sub">Price (USD)</label> <input type="number" id="price_${idEsc}" value="${r.price_usd ?? 298}" min="1" style="width:70px"/></span>
+            <span><label class="sub">Seats</label> <input type="number" id="capacity_${idEsc}" value="${r.capacity ?? 3}" min="1" style="width:50px"/></span>
+            <span><label class="sub">Times (comma-separated)</label> <input type="text" id="times_${idEsc}" value="${timesVal}" placeholder="09:00,11:00,13:00,16:00" style="width:180px"/></span>
+            <button class="btn small" onclick="saveSlotRule('${idEsc}')">Save</button>
+          </div>
+        `}).join("");
+      } catch (e) {
+        el.innerHTML = '<div class="sub">Could not load slot rules. Sign in if needed.</div>';
+      }
+    }
+    async function saveSlotRule(id) {
+      const rules = await OpsApi.fetch("GET", "/ops/slot-rules");
+      const r = rules.find(x => x.id === id);
+      if (!r) return;
+      const priceUsd = parseInt(document.getElementById("price_" + id).value, 10);
+      const capacity = parseInt(document.getElementById("capacity_" + id).value, 10);
+      const times = (document.getElementById("times_" + id).value || "").trim() || "09:00,11:00,13:00,16:00";
+      if (!priceUsd || priceUsd < 1) return alert("Enter a valid price.");
+      if (!capacity || capacity < 1) return alert("Enter a valid seats per slot (at least 1).");
+      const payload = {
+        route_id: r.route_id,
+        days_of_week: r.days_of_week ?? "0,1,2,3,4,5,6",
+        times: times,
+        duration_minutes: r.duration_minutes ?? 30,
+        price_usd: priceUsd,
+        price_tzs: r.price_tzs ?? null,
+        capacity: capacity,
+        flight_no_prefix: r.flight_no_prefix ?? "FSB",
+        cabin: r.cabin ?? "Economy",
+        active: r.active !== false,
+        horizon_days: r.horizon_days ?? 90
+      };
+      try {
+        await OpsApi.fetch("PATCH", "/ops/slot-rules/" + id, payload);
+        document.getElementById("msg").textContent = "Slot rule saved.";
+        setTimeout(() => { document.getElementById("msg").textContent = ""; }, 3000);
+      } catch (e) {
+        alert(e.message || "Failed to save");
+      }
+    }
+
+    async function init() {
+      await loadFxRate();
+      await loadSlotRules();
+    }
+    init();
+  </script>
+</body></html>

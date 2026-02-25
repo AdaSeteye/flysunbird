@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FlySunbird • Pilot</title>
+  <link rel="stylesheet" href="./admin_assets/admin.css"/>
+  <link rel="stylesheet" href="./admin_assets/module.css"/>
+  <style>
+    .pilot-wrap { padding: 24px; max-width: 900px; margin: 0 auto; }
+    .assign-card { margin-top: 16px; }
+    .assign-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+    .assign-status { font-size: 12px; padding: 4px 10px; border-radius: 8px; background: rgba(56,189,248,0.2); color: #38bdf8; font-weight: 700; }
+    .assign-status.completed { background: rgba(34,197,94,0.2); color: #22c55e; }
+    .assign-status.accepted { background: rgba(167,139,250,0.2); color: #a78bfa; }
+    .bookings-list { margin-top: 12px; padding-left: 16px; }
+    .booking-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--border); }
+    .booking-row:last-child { border-bottom: none; }
+  </style>
+</head>
+<body class="admin">
+  <div class="pilot-wrap">
+    <div class="hrow">
+      <div>
+        <h1>My Assignments</h1>
+        <p class="sub">View flight assignments, accept them, and mark flights as completed.</p>
+      </div>
+      <button class="btn" type="button" onclick="load()">Refresh</button>
+    </div>
+    <div class="sb-foot" style="margin-top: 16px; padding: 12px 0; border-top: 1px solid var(--border);">
+      <a href="login.html" style="color: var(--muted); font-size: 14px;">Sign out</a>
+    </div>
+    <div id="content">
+      <div class="card" style="margin-top: 20px;">
+        <div class="sub">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    if (!localStorage.getItem("FSB_TOKEN")) {
+      window.location.replace("login.html");
+    }
+
+    const getApiBase = () => (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
+    const getToken = () => localStorage.getItem("FSB_TOKEN") || "";
+
+    async function refreshAccessToken() {
+      const base = getApiBase(), ref = localStorage.getItem("FSB_REFRESH_TOKEN");
+      if (!base || !ref) return false;
+      try {
+        const r = await fetch(base + "/auth/refresh?refresh_token=" + encodeURIComponent(ref), { method: "POST", headers: { "Content-Type": "application/json" } });
+        if (!r.ok) return false;
+        const data = await r.json();
+        if (data.access_token) {
+          localStorage.setItem("FSB_TOKEN", data.access_token);
+          if (data.refresh_token) localStorage.setItem("FSB_REFRESH_TOKEN", data.refresh_token);
+          return true;
+        }
+      } catch (e) {}
+      return false;
+    }
+
+    async function api(method, path, body, retried) {
+      const base = getApiBase(), token = getToken();
+      if (!base) throw new Error("API base not set. Sign in from the login page.");
+      const res = await fetch(base + path, {
+        method,
+        headers: { "Content-Type": "application/json", ...(token ? { "Authorization": "Bearer " + token } : {}) },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      if (res.status === 401 && !retried && await refreshAccessToken()) return api(method, path, body, true);
+      if (!res.ok) {
+        const text = await res.text();
+        if (res.status === 401) throw new Error("Session expired. Please sign in again.");
+        throw new Error(text || res.statusText);
+      }
+      return await res.json();
+    }
+
+    async function load() {
+      const el = document.getElementById("content");
+      try {
+        const data = await api("GET", "/pilot/assignments");
+        const items = data.items || [];
+        if (items.length === 0) {
+          el.innerHTML = '<div class="card assign-card"><div class="sub">No assignments yet. Ops will assign you flights when bookings are made.</div></div>';
+          return;
+        }
+        el.innerHTML = items.map(a => {
+          const statusClass = (a.status || "").toLowerCase();
+          const routeStr = a.routeLabel || (a.from_label && a.to_label ? (a.from_label + " → " + a.to_label) : "—");
+          const dateTimeStr = [a.dateStr, (a.start || "") + (a.end ? "–" + a.end : "")].filter(Boolean).join(" • ") || "—";
+          const bookingsHtml = (a.bookings || []).map(b => {
+            const canComplete = (statusClass === "accepted" || statusClass === "completed") && (b.status || "").toLowerCase() !== "completed";
+            const btnHtml = canComplete
+              ? '<button class="btn" type="button" onclick="completeFlight(\'' + (b.bookingRef || "").replace(/'/g, "\\'") + '\')">Complete flight</button>'
+              : (b.status || "").toLowerCase() === "completed" || statusClass === "completed" ? '<span class="sub">Done</span>' : '';
+            return '<div class="booking-row">' +
+              '<span>Booking ' + (b.bookingRef || "-") + ' • ' + (b.pax || 0) + ' pax • ' + (b.paymentStatus || "") + '</span>' +
+              btnHtml +
+              '</div>';
+          }).join("");
+          const acceptBtn = statusClass !== "accepted" && statusClass !== "completed"
+            ? '<button class="btn" type="button" onclick="acceptAssignment(\'' + (a.assignmentId || "").replace(/'/g, "\\'") + '\')">Accept</button>'
+            : '';
+          return '<div class="card assign-card">' +
+            '<div class="assign-header">' +
+              '<span class="assign-status ' + statusClass + '">' + (a.status || "pending") + '</span>' +
+              acceptBtn +
+            '</div>' +
+            '<div style="font-weight:700; margin-top: 8px; font-size: 1.05em;">' + routeStr + '</div>' +
+            '<div class="sub" style="margin-top: 4px;">' + dateTimeStr + '</div>' +
+            '<div class="sub" style="margin-top: 6px;">Assignment: ' + (a.assignmentId || "-").slice(0, 8) + "… • " + (a.createdAt || "").slice(0, 10) + '</div>' +
+            '<div class="bookings-list">' + bookingsHtml + '</div>' +
+            '</div>';
+        }).join("");
+      } catch (err) {
+        el.innerHTML = '<div class="card assign-card"><div class="sub" style="color: #f87171;">Error: ' + (err.message || String(err)) + '</div></div>';
+      }
+    }
+
+    async function acceptAssignment(id) {
+      try {
+        await api("POST", "/pilot/assignments/" + encodeURIComponent(id) + "/accept");
+        load();
+      } catch (err) {
+        alert(err.message || "Failed to accept");
+      }
+    }
+
+    async function completeFlight(bookingRef) {
+      try {
+        await api("POST", "/pilot/bookings/" + encodeURIComponent(bookingRef) + "/complete");
+        load();
+      } catch (err) {
+        alert(err.message || "Failed to complete");
+      }
+    }
+
+    (async function init() {
+      const base = getApiBase(), token = getToken();
+      if (!base || !token) return;
+      try {
+        const meRes = await fetch(base + "/auth/me", { headers: { "Authorization": "Bearer " + token } });
+        if (meRes.ok) {
+          const me = await meRes.json();
+          const role = (me.role || "").toLowerCase();
+          if (role !== "pilot") {
+            window.location.replace("admin-dashboard.html");
+            return;
+          }
+        }
+      } catch (_) {}
+      load();
+    })();
+  </script>
+</body>
+</html>

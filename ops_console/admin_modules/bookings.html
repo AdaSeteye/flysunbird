@@ -1,0 +1,686 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="../admin_assets/module.css"/>
+</head>
+<body>
+<div class="wrap">
+  <div class="hrow">
+    <div>
+      <h1>Bookings Inbox</h1>
+      <div class="sub">This is the OPS UI for the <b>data the booker submits</b> (booking + passengers + contact).</div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="button" data-label="Refresh" onclick="refreshWithFeedback(this)">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight:900">Create booking (Ops)</div>
+    <div class="sub">Create a booking in Ops and generate a payment link. Seats will reduce automatically.</div>
+    <div class="hr"></div>
+
+    <div class="row" id="opsOriginRow">
+      <div style="grid-column:1/-1">
+        <label>Origin (for calendar)</label>
+        <select id="opsOrigin"><option value="">— Select origin —</option></select>
+        <div id="opsSignInHint" class="sub" style="display:none; margin-top:6px; color:#c00;">Sign in (login page) to load origins and slots.</div>
+        <div class="sub" style="margin-top:6px">Pick origin, then choose date from the calendar to see available slots.</div>
+      </div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div>
+        <label>Date</label>
+        <div class="actions" style="margin-top:4px;padding:0">
+          <button type="button" class="btn primary" id="opsChooseDate" disabled>Choose date</button>
+          <input id="date" type="date" style="max-width:160px"/>
+        </div>
+      </div>
+      <div><label>Passengers count</label><input id="pax" type="number" min="1" value="1" oninput="syncPax()"/></div>
+    </div>
+    <div id="opsCalendarBlock" class="card cal-wrap ops-cal" style="display:none;margin-top:12px">
+      <div class="cal-head">
+        <div class="cal-head-left"><button type="button" class="btn small" id="opsCalPrev">◀ Prev</button><span class="sub" id="opsCalRange"></span></div>
+        <div class="cal-head-right"><button type="button" class="btn small" id="opsCalNext">Next ▶</button></div>
+      </div>
+      <div class="cal-body">
+        <div class="month" id="opsM1"></div>
+        <div class="month" id="opsM2"></div>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:14px">
+      <div style="grid-column:1/-1">
+        <label>Choose Inventory Slot</label>
+        <select id="inv" onchange="fillFromInv()"></select>
+      </div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div><label>From (text)</label><input id="from" placeholder="Origin"/></div>
+      <div><label>Subregion (text)</label><input id="to" placeholder="Destination"/></div>
+    </div>
+
+    
+    <div class="hr"></div>
+    <div style="font-weight:900">Passenger details</div>
+    <div class="sub">Capture the same information as passenger.html so Ops can process bookings end-to-end.</div>
+    <div class="hr"></div>
+    <div id="passengersWrap"></div>
+
+<div class="row" style="margin-top:10px">
+      <div><label>Slot Start</label><input id="start" type="time" value="09:00"/></div>
+      <div><label>Slot End</label><input id="end" type="time" value="10:10"/></div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div><label>Amount</label><input id="amount" type="number" step="0.01" value="220"/></div>
+      <div><label>Currency</label><select id="currency"><option>USD</option><option>TZS</option></select></div>
+    </div>
+
+    <div class="row" style="margin-top:10px">
+      <div><label>Contact Email</label><input id="contactEmail" type="email" placeholder="booker@example.com"/></div>
+      <div><label>Contact Name</label><input id="contactName" placeholder="Booker name"/></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label>Contact Phone</label><input id="contactPhone" placeholder="+255..."/></div>
+    </div>
+
+    <div class="actions" style="margin-top:10px">
+      <button class="btn primary" onclick="addOffline()">Create booking + reserve seats</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="hrow">
+      <div style="font-weight:900">All bookings</div>
+      <div class="actions">
+        <input id="q" placeholder="Search ref / phone / name / route…" style="max-width:320px" oninput="render()"/>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <div style="overflow:auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Created</th><th>Ref</th><th>Route</th><th>Date</th>
+            <th>Status</th><th>Payment</th><th>Contact</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" id="detail" style="display:none"></div>
+</div>
+
+<script src="../admin_assets/admin_store.js"></script>
+<script src="../admin_assets/countries.js"></script>
+<script src="../admin_assets/ops_inventory.js"></script>
+<script src="../admin_assets/ops_bookings.js"></script>
+<script>
+  const ONLINE = !!(localStorage.getItem('FSB_API_BASE') || window.API_BASE);
+  const API_BASE = (localStorage.getItem('FSB_API_BASE') || window.API_BASE || '').replace(/\/$/, '');
+
+  async function refreshWithFeedback(btn){
+    if(btn){ btn.disabled=true; btn.textContent='Loading…'; }
+    try { await render(); } finally { if(btn){ btn.disabled=false; btn.textContent=btn.dataset.label||'Refresh'; } }
+  }
+
+  function toLocalDateStr(d) {
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+  let opsCalendarAvailability = {};
+  let opsViewMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const todayOps = new Date(); todayOps.setHours(0,0,0,0);
+  const endDayOps = new Date(todayOps); endDayOps.setDate(endDayOps.getDate() + 60);
+
+  async function loadOpsOrigins(){
+    var sel = document.getElementById('opsOrigin');
+    if (!sel) return;
+    if (!API_BASE) {
+      sel.innerHTML = '<option value="">— Sign in to load origins —</option>';
+      return;
+    }
+    var allowedOrigins = ['Dar es Salaam Airport', 'Zanzibar Airport', 'Zanzibar Nungwi', 'Zanzibar Seacliff', 'Zanzibar Paje'];
+    var excludedOrigins = ['Zanzibar Stone Town', 'Zanzibar Kendwa Rocks'];
+    try {
+      const res = await fetch(API_BASE + '/public/routes');
+      const routes = res.ok ? await res.json() : [];
+      const byRegion = { DAR: [], ZANZIBAR: [] };
+      (routes || []).forEach(function(r){
+        var fromLabel = (r.from != null ? r.from : r.from_) ? String(r.from != null ? r.from : r.from_).trim() : '';
+        if (!fromLabel || excludedOrigins.indexOf(fromLabel) !== -1) return;
+        if (allowedOrigins.indexOf(fromLabel) === -1) return;
+        var region = (r.mainRegion || '').toUpperCase();
+        if (region === 'ZANZIBAR') {
+          if (byRegion.ZANZIBAR.indexOf(fromLabel) === -1) byRegion.ZANZIBAR.push(fromLabel);
+        } else {
+          if (byRegion.DAR.indexOf(fromLabel) === -1) byRegion.DAR.push(fromLabel);
+        }
+      });
+      byRegion.DAR.sort();
+      byRegion.ZANZIBAR.sort();
+      var html = '<option value="">— Select origin —</option>';
+      if (byRegion.DAR.length) {
+        html += '<optgroup label="Dar es Salaam">' + byRegion.DAR.map(function(o){ return '<option value="'+o.replace(/"/g,'&quot;')+'">'+o+'</option>'; }).join('') + '</optgroup>';
+      }
+      if (byRegion.ZANZIBAR.length) {
+        html += '<optgroup label="Zanzibar">' + byRegion.ZANZIBAR.map(function(o){ return '<option value="'+o.replace(/"/g,'&quot;')+'">'+o+'</option>'; }).join('') + '</optgroup>';
+      }
+      if (!byRegion.DAR.length && !byRegion.ZANZIBAR.length) html += '<option value="">— No routes (run API + seed) —</option>';
+      sel.innerHTML = html;
+    } catch (e) {
+      sel.innerHTML = '<option value="">— Could not load (check API) —</option>';
+    }
+  }
+
+  var opsOriginEl = document.getElementById('opsOrigin');
+  if (opsOriginEl) opsOriginEl.addEventListener('change', function(){
+    document.getElementById('opsChooseDate').disabled = !this.value;
+    if (!this.value) document.getElementById('opsCalendarBlock').style.display = 'none';
+    hydrateInventory();
+  });
+
+  function opsWithinRange(d){ return d >= todayOps && d < endDayOps; }
+  function opsMonthGrid(ym){
+    const m0 = new Date(ym.getFullYear(), ym.getMonth(), 1);
+    const startW = (m0.getDay() + 6) % 7;
+    const daysInM = new Date(ym.getFullYear(), ym.getMonth() + 1, 0).getDate();
+    const grid = [];
+    const total = Math.ceil((startW + daysInM) / 7) * 7;
+    for (let i = 0; i < total; i++) {
+      const d = i - startW + 1;
+      grid.push(d >= 1 && d <= daysInM ? new Date(ym.getFullYear(), ym.getMonth(), d) : null);
+    }
+    return grid;
+  }
+  function opsPriceColor(usd){
+    if (usd <= 180) return '#10b981';
+    if (usd <= 223) return '#f59e0b';
+    if (usd <= 280) return '#8b5cf6';
+    return '#ef4444';
+  }
+
+  async function fetchOpsCalendarAvailability(){
+    var o = document.getElementById('opsOrigin');
+    const origin = o ? o.value : '';
+    if (!API_BASE || !origin) return;
+    const y = opsViewMonth.getFullYear(), m = opsViewMonth.getMonth();
+    const start = new Date(y, m, 1);
+    const end = new Date(y, m + 2, 0);
+    const startStr = toLocalDateStr(start);
+    const endStr = toLocalDateStr(end);
+    try {
+      const res = await fetch(`${API_BASE}/public/calendar-availability?from_label=${encodeURIComponent(origin)}&start=${startStr}&end=${endStr}&pax=1`);
+      opsCalendarAvailability = res.ok ? await res.json() : {};
+    } catch (e) { opsCalendarAvailability = {}; }
+  }
+
+  function renderOpsCalendarBody(){
+    var o = document.getElementById('opsOrigin');
+    const origin = o ? o.value : '';
+    var c = document.getElementById('currency');
+    const currency = (c ? c.value : '') || 'USD';
+    const TZS = 2450;
+    const fmt = (usd) => currency === 'USD' ? `from $${usd}` : `from ${(usd * TZS | 0).toLocaleString()} TZS`;
+
+    function fillMonth(container, monthDate){
+      const grid = opsMonthGrid(new Date(monthDate.getFullYear(), monthDate.getMonth(), 1));
+      container.innerHTML = `
+        <div class="m-title">${monthDate.toLocaleString('en', { month: 'long', year: 'numeric' })}</div>
+        <div class="wk"><span class="n">M</span><span class="n">T</span><span class="n">W</span><span class="n">T</span><span class="n">F</span><span class="n">S</span><span class="n">S</span></div>
+        <div class="days"></div>
+      `;
+      const body = container.querySelector('.days');
+      grid.forEach(d => {
+        const cell = document.createElement('div');
+        cell.className = 'd';
+        if (!d) { cell.style.visibility = 'hidden'; body.appendChild(cell); return; }
+        if (!opsWithinRange(d)) {
+          cell.classList.add('disabled');
+          cell.innerHTML = `<div class="p">${d.getDate()}</div>`;
+          body.appendChild(cell);
+          return;
+        }
+        const dateStr = toLocalDateStr(d);
+        const hasSlots = origin && (dateStr in opsCalendarAvailability);
+        const noSlots = origin && !hasSlots;
+        let priceStr = '—', color = 'transparent';
+        if (hasSlots) {
+          const usd = opsCalendarAvailability[dateStr].minPriceUSD;
+          priceStr = fmt(usd);
+          color = opsPriceColor(usd);
+        } else if (noSlots) {
+          priceStr = 'No flights';
+          cell.classList.add('no-slots');
+        }
+        cell.innerHTML = `
+          <div style="display:grid;gap:2px;text-align:center">
+            <span class="dw">${d.toLocaleString('en', { weekday: 'short' })}</span>
+            <span class="p">${d.getDate()}</span>
+            <span class="pr">${priceStr}</span>
+          </div>
+          <i class="color" style="background:${color}"></i>
+        `;
+        if (noSlots) cell.title = 'No available slots';
+        cell.addEventListener('click', () => {
+          document.getElementById('date').value = dateStr;
+          document.getElementById('from').value = origin || '';
+          document.querySelectorAll('#opsCalendarBlock .d.sel').forEach(x => x.classList.remove('sel'));
+          cell.classList.add('sel');
+          hydrateInventory();
+        });
+        body.appendChild(cell);
+      });
+    }
+
+    fillMonth(document.getElementById('opsM1'), opsViewMonth);
+    fillMonth(document.getElementById('opsM2'), new Date(opsViewMonth.getFullYear(), opsViewMonth.getMonth() + 1, 1));
+    const rangeEl = document.getElementById('opsCalRange');
+    if (rangeEl) rangeEl.textContent = todayOps.toLocaleDateString('en', { day: '2-digit', month: 'short' }) + ' – ' + new Date(endDayOps.getTime() - 86400000).toLocaleDateString('en', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  async function showOpsCalendar(){
+    var o = document.getElementById('opsOrigin');
+    const origin = o ? o.value : '';
+    if (!origin) return;
+    document.getElementById('opsCalendarBlock').style.display = 'block';
+    await fetchOpsCalendarAvailability();
+    renderOpsCalendarBody();
+  }
+
+  var btnCal = document.getElementById('opsChooseDate');
+  if (btnCal) btnCal.addEventListener('click', showOpsCalendar);
+  var btnPrev = document.getElementById('opsCalPrev');
+  if (btnPrev) btnPrev.addEventListener('click', async () => {
+    opsViewMonth = new Date(opsViewMonth.getFullYear(), opsViewMonth.getMonth() - 1, 1);
+    if (opsViewMonth < new Date(todayOps.getFullYear(), todayOps.getMonth(), 1)) { opsViewMonth = new Date(todayOps.getFullYear(), todayOps.getMonth(), 1); return; }
+    await fetchOpsCalendarAvailability();
+    renderOpsCalendarBody();
+  });
+  var btnNext = document.getElementById('opsCalNext');
+  if (btnNext) btnNext.addEventListener('click', async () => {
+    opsViewMonth = new Date(opsViewMonth.getFullYear(), opsViewMonth.getMonth() + 1, 1);
+    if (opsViewMonth > new Date(endDayOps.getFullYear(), endDayOps.getMonth(), 1)) { opsViewMonth = new Date(endDayOps.getFullYear(), endDayOps.getMonth(), 1); return; }
+    await fetchOpsCalendarAvailability();
+    renderOpsCalendarBody();
+  });
+
+  async function setStatus(id, status){
+    if(!ONLINE) return alert("Sign in to manage bookings.");
+    if(status === "CONFIRMED"){ try{ await OpsBookings.markPaidRemote(id); }catch(e){ alert(e.message||String(e)); return; } }
+    else if(status === "CANCELLED"){ const reason = prompt("Cancel reason (optional):") || "OPS cancel"; try{ await OpsBookings.cancelRemote(id, { decision_note: reason }); }catch(e){ alert(e.message||String(e)); return; } }
+    await render();
+  }
+  async function setPay(id, paymentStatus, pilotEmail){
+    if(!ONLINE) return alert("Sign in to manage bookings.");
+    if(paymentStatus === "PAID"){ try{ await OpsBookings.markPaidRemote(id, pilotEmail); }catch(e){ alert(e.message||String(e)); return; } }
+    await render();
+  }
+  async function resendTicket(ref){
+    const reason = prompt("Reason (optional):", "Resent from OPS") || "Resent from OPS";
+    try{ await OpsBookings.resendTicketRemote(ref, reason); alert("Ticket email sent."); } catch(e){ alert(e.message||String(e)); }
+  }
+
+  // Display format for "Choose Inventory Slot": date • origin → destination • start-end • seats • currency price (from API /ops/time-entries: from_label, to_label, start, end, seats_available, price_usd)
+  function invLabel(it){
+    const d = it.date_str || it.date || '-';
+    const from = it.from_label || it.from || '';
+    const to = it.to_label || it.subregion || it.to || '';
+    const route = from && to ? `${from} → ${to}` : (it.route_id ? `Route ${it.route_id.slice(0,8)}…` : 'Slot');
+    const start = it.start_time || it.start || '';
+    const end = it.end_time || it.end || '';
+    const seats = it.seats_available ?? it.seatsAvailable ?? 0;
+    const cur = it.currency || 'USD';
+    const price = it.price_usd ?? it.priceUSD ?? it.price ?? it.base_price_usd ?? 0;
+    return `${d} • ${route} • ${start}-${end} • ${seats} seats • ${cur} ${Number(price||0).toFixed(0)}`;
+  }
+
+  async function hydrateInventory(){
+    const sel = document.getElementById('inv');
+    if(!ONLINE) { sel.innerHTML = '<option value="">— Sign in to load slots —</option>'; return; }
+    const dateStr = document.getElementById('date').value || toLocalDateStr(new Date());
+    let list = await OpsInventory.listRemote(dateStr);
+    list = (list || []).slice().sort((a,b)=>((a.date_str||a.date||"").localeCompare(b.date_str||b.date||"")) || (a.start||"").localeCompare(b.start||""));
+    const originSel = document.getElementById('opsOrigin');
+    const origin = originSel ? (originSel.value || '').trim() : '';
+    if (origin) list = list.filter(it => (it.from_label || it.from || '').trim() === origin);
+    window.__INV_CACHE = list;
+    sel.innerHTML = ['<option value="">— Select inventory slot —</option>']
+      .concat(list.map(it => `<option value="${it.id}">${invLabel(it)}</option>`))
+      .join("");
+  }
+
+  function fillFromInv(){
+    const id = document.getElementById('inv').value;
+    const it = (window.__INV_CACHE||[]).find(x=>x.id===id);
+    if(!it) return;
+    const r = document.getElementById('region'); if(r) r.value = it.region || "";
+    document.getElementById('from').value = it.from || it.from_label || "";
+    document.getElementById('to').value = it.subregion || it.to_label || it.to || "";
+    document.getElementById('date').value = (it.date_str || it.date) || "";
+    document.getElementById('start').value = it.start || "";
+    document.getElementById('end').value = it.end || "";
+    document.getElementById('amount').value = Number(it.price_usd || it.price||0);
+    document.getElementById('currency').value = it.currency || "USD";
+  }
+
+  function buildPaymentLink(bookingId){
+    // placeholder link until backend generates a signed token
+    const amount = Number(document.getElementById('amount').value||0);
+    const currency = document.getElementById('currency').value || "USD";
+    // client payment page exists
+    return `../fly/payment.html?bookingRef=${encodeURIComponent(bookingId)}&amount=${encodeURIComponent(amount)}&currency=${encodeURIComponent(currency)}`;
+  }
+
+  
+function buildPassengerRows(pax){
+  pax = Number(pax||1);
+  if(pax<1) pax=1;
+  const wrap = document.getElementById('passengersWrap');
+  if(!wrap) return;
+  const nationalityOptions = (window.COUNTRIES && Array.isArray(COUNTRIES)) ? COUNTRIES : ["Tanzania","Kenya","Uganda","Rwanda","Ethiopia","United States","United Kingdom"];
+  wrap.innerHTML = Array.from({length:pax}).map((_,i)=>`
+    <div class="card" style="margin:10px 0;background:rgba(255,255,255,0.04)">
+      <div style="font-weight:900">Passenger ${i+1}</div>
+      <div class="hr"></div>
+      <div class="row">
+        <div><label>First name</label><input data-p="${i}" data-k="firstName" placeholder="First name"/></div>
+        <div><label>Surname</label><input data-p="${i}" data-k="surname" placeholder="Surname"/></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label>Government ID Type</label>
+          <select data-p="${i}" data-k="idType">
+            <option value="Passport">Passport</option>
+            <option value="NIDA">NIDA</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div><label>Government ID Number</label><input data-p="${i}" data-k="idNumber" placeholder="ID number"/></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label>Gender</label>
+          <select data-p="${i}" data-k="gender">
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Other">Other</option>
+          </select>
+        </div>
+        <div><label>Date of birth</label><input data-p="${i}" data-k="dob" type="date"/></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div>
+          <label>Nationality</label>
+          <select data-p="${i}" data-k="nationality">
+            ${nationalityOptions.map(c=>`<option value="${c}">${c}</option>`).join("")}
+          </select>
+        </div>
+        <div><label>Weight (kg)</label><input data-p="${i}" data-k="weightKg" type="number" step="0.1" placeholder="e.g. 72"/></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div style="grid-column:1/-1">
+          <label>Phone (required for Passenger 1)</label>
+          <input data-p="${i}" data-k="phone" placeholder="+255..." />
+        </div>
+      </div>
+    </div>
+  `).join("");
+}
+
+function collectPassengers(){
+  const pax = Number(document.getElementById('pax').value||1);
+  const out = Array.from({length:pax}).map(()=>({}));
+  document.querySelectorAll('#passengersWrap [data-p][data-k]').forEach(el=>{
+    const i = Number(el.dataset.p);
+    const k = el.dataset.k;
+    out[i][k] = el.value;
+  });
+  if(!out[0] || !out[0].phone) throw new Error("Passenger 1 phone is required.");
+  return out;
+}
+
+function syncPax(){
+  const pax = Number(document.getElementById('pax').value||1);
+  buildPassengerRows(pax);
+}
+
+// initial build
+setTimeout(syncPax, 0);
+
+async function addOffline(){
+  if(!ONLINE){
+    alert("Sign in from the login page to create bookings.");
+    return;
+  }
+  var invId = document.getElementById('inv') ? document.getElementById('inv').value : '';
+  if (!invId) {
+    alert("1) Pick an Origin from the dropdown.\n2) Click \"Choose date\" and pick a day.\n3) Select an Inventory slot.\nThen fill passengers and click Create booking.");
+    return;
+  }
+  var pax = Number(document.getElementById('pax').value||1);
+    var te = (window.__INV_CACHE||[]).find(function(x){ return x.id===invId; });
+    if(!te) {
+      alert("Select an inventory slot from the dropdown first. If the list is empty, sign in, pick a date, and run \"generate slots\" in the API (Swagger).");
+      return;
+    }
+    let passengers=[];
+    try{ passengers = collectPassengers(); }catch(e){ return alert(e.message||String(e)); }
+
+    var contactEmailEl = document.getElementById('contactEmail');
+    var contactNameEl = document.getElementById('contactName');
+    var currencyEl = document.getElementById('currency');
+    var bookerEmail = (contactEmailEl && contactEmailEl.value.trim()) || (passengers[0] && passengers[0].phone) || "ops@flysunbird.co.tz";
+    var bookerNamePart = passengers[0] ? ((passengers[0].firstName||"") + " " + (passengers[0].surname||"")).trim() : "";
+    var bookerName = (contactNameEl && contactNameEl.value.trim()) || bookerNamePart || "Customer";
+    var payload = {
+      timeEntryId: te.id,
+      pax: pax,
+      bookerEmail: bookerEmail,
+      bookerName: bookerName,
+      currency: (currencyEl && currencyEl.value) || "USD",
+      passengers: passengers.map(function(p){
+        return {
+          first: p.firstName||p.first||"",
+          last: p.surname||p.last||"",
+          phone: p.phone||"",
+          gender: p.gender||"",
+          dob: p.dob||"",
+          nationality: p.nationality||"",
+          idType: p.idType||"",
+          idNumber: p.idNumber||""
+        };
+      })
+    };
+
+    const created = await OpsBookings.createDraftRemote(payload);
+    const ref = created.bookingRef || created.booking_ref || created.ref;
+    if(!ref) return alert("Backend did not return bookingRef");
+    const linkObj = await OpsBookings.paymentLinkRemote(ref);
+    const payUrl = linkObj.url || linkObj.payment_url || linkObj.paymentUrl;
+
+    // open detail directly from backend
+    await openDetail(ref);
+    if(payUrl){
+      try{ await navigator.clipboard.writeText(payUrl); }catch(e){}
+      alert("Draft created. Payment link generated.");
+    }else{
+      alert("Draft created.");
+    }
+    return;
+  }
+
+  async function regenLink(id){
+    if(!ONLINE) return alert("Sign in to manage bookings.");
+    const linkRes = await OpsBookings.paymentLinkRemote(id);
+    const link = linkRes.url || linkRes.payment_url || linkRes.paymentUrl;
+    window.__PAYLINK = link;
+    openDetail(id);
+  }
+
+  async function copyLink(id){
+    if(!ONLINE) return alert("Sign in to manage bookings.");
+    let x = await OpsBookings.getRemote(id);
+    if(!x) return;
+    let link = x.paymentLink;
+    if(!link) {
+      const linkRes = await OpsBookings.paymentLinkRemote(id);
+      link = linkRes.url || linkRes.payment_url || linkRes.paymentUrl;
+    }
+    if(!link) return alert("No payment link yet.");
+    try{
+      await navigator.clipboard.writeText(link);
+      alert("Copied");
+    }catch(e){
+      const ta=document.createElement("textarea");
+      ta.value=link; document.body.appendChild(ta); ta.select(); document.execCommand("copy"); ta.remove();
+      alert("Copied");
+    }
+  }
+
+  async function openDetail(id){
+    if(!ONLINE){ alert("Sign in to view booking details."); return; }
+    let x = null;
+    try { x = await OpsBookings.getRemote(id); } catch(e){ alert(e.message||String(e)); return; }
+    if(!x) return;
+    const ref = x.bookingRef||x.id;
+    const isPaid = (x.paymentStatus||"").toLowerCase() === "paid";
+    const isCancelled = x.status === "CANCELLED";
+    const routeStr = (x.from && x.to) ? (x.from + " → " + x.to) : (x.timeEntry ? (x.timeEntry.dateStr + " " + (x.timeEntry.start||"") + "-" + (x.timeEntry.end||"")) : "-");
+    const slotStr = x.timeEntry ? ((x.timeEntry.start||"-") + "–" + (x.timeEntry.end||"-")) : (x.selected ? (x.selected.start||"-") + "–" + (x.selected.end||"-") : "-");
+    const contactStr = x.contactName || (x.contact && x.contact.name) || "-";
+    const contactSub = x.contactEmail || (x.contact && (x.contact.email || x.contact.phone)) || "-";
+    const el = document.getElementById('detail');
+    el.style.display = 'block';
+    el.innerHTML = `
+      <div class="hrow">
+        <div>
+          <div style="font-weight:900">Booking Detail</div>
+          <div class="sub">Ref: <b>${ref}</b> • Created: ${x.createdAt||"-"}</div>
+        </div>
+        <div class="actions">
+          <button class="btn" onclick="window.open('../fly/confirmation.html?ref=${encodeURIComponent(ref)}','_blank')">Open Confirmation</button>
+          ${ONLINE && isPaid && API_BASE ? `<button class="btn" onclick="window.open(API_BASE + '/public/bookings/' + encodeURIComponent('${ref.replace(/'/g,"\\'")}') + '/ticket', '_blank')">Download ticket</button>` : ""}
+          ${ONLINE && isPaid ? `<button class="btn" onclick="resendTicket('${ref.replace(/'/g,"\\'")}')">Resend ticket</button>` : ""}
+          ${!isPaid ? `
+            <div class="row" style="align-items:center;margin-right:10px">
+              <label style="white-space:nowrap">Pilot email</label>
+              <input id="detailPilotEmail" type="email" placeholder="pilot@flysunbird.co.tz" style="max-width:220px"/>
+            </div>
+            <button class="btn primary" onclick="setPay('${ref.replace(/'/g,"\\'")}','PAID', document.getElementById('detailPilotEmail') && document.getElementById('detailPilotEmail').value.trim() || undefined); openDetail('${ref.replace(/'/g,"\\'")}');">Mark Paid</button>
+          ` : ""}
+          ${!isCancelled ? `<button class="btn danger" onclick="if(confirm('Cancel this booking?')) setStatus('${ref.replace(/'/g,"\\'")}','CANCELLED').then(()=>openDetail('${ref.replace(/'/g,"\\'")}'));">Cancel</button>` : ""}
+        </div>
+      </div>
+      <div class="hr"></div>
+
+      <div class="grid">
+        <div class="card" style="margin:0">
+          <div class="sub">Route</div>
+          <div style="font-weight:900">${routeStr}</div>
+          <div class="sub" style="margin-top:6px">Date: ${x.dateStr||x.date||"-"} • Slot: ${slotStr}</div>
+        </div>
+        <div class="card" style="margin:0">
+          <div class="sub">Status</div>
+          <div class="actions" style="margin-top:6px">
+            <span class="badge ${isCancelled?'bad':isPaid?'ok':'warn'}">${x.status||"-"}</span>
+            <span class="badge ${isPaid?'ok':(x.paymentStatus==='failed'?'bad':'warn')}">${x.paymentStatus||"unpaid"}</span>
+          </div>
+        </div>
+        <div class="card" style="margin:0">
+          <div class="sub">Contact</div>
+          <div style="font-weight:900">${contactStr}</div>
+          <div class="sub" style="margin-top:6px">${contactSub}</div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+      <div style="font-weight:900">Passengers</div>
+      <code class="k">${JSON.stringify(x.passengers||[], null, 2)}</code>
+
+      ${ONLINE && isPaid ? `
+      <div class="hr"></div>
+      <div style="font-weight:900">Assign Pilot</div>
+      <div class="sub">Assign a pilot to this flight (e.g. for Cybersource-paid bookings).</div>
+      <div class="row" style="margin-top:10px;align-items:center">
+        <label style="white-space:nowrap">Pilot email</label>
+        <input id="assignPilotEmail" type="email" placeholder="pilot@flysunbird.co.tz" style="max-width:260px"/>
+        <button class="btn" onclick="(async()=>{const e=document.getElementById('assignPilotEmail');const ref='${ref.replace(/'/g,"\\'")}';if(!e||!e.value.trim()){alert('Enter pilot email');return;}try{await OpsBookings.assignPilotRemote(ref,e.value.trim());alert('Pilot assigned.');openDetail(ref);}catch(err){alert(err.message||'Failed');})()">Assign Pilot</button>
+      </div>
+      ` : ""}
+
+      ${(x.payments && x.payments.length) ? `
+      <div class="hr"></div>
+      <div style="font-weight:900">Payments</div>
+      <code class="k">${JSON.stringify(x.payments, null, 2)}</code>
+      ` : ""}
+    `;
+    el.scrollIntoView({behavior:"smooth"});
+  }
+
+  function del(id){
+    if(!confirm("Delete booking?")) return;
+    OpsBookings.remove(id);
+    document.getElementById('detail').style.display='none';
+    render();
+  }
+
+  async function render(){
+    if(!ONLINE){
+      document.getElementById('tbody').innerHTML = `<tr><td colspan="8" class="sub">Sign in from the login page to view bookings.</td></tr>`;
+      return;
+    }
+    let list = [];
+    try { list = await OpsBookings.listRemote(); } catch(e){ document.getElementById('tbody').innerHTML = `<tr><td colspan="8" class="sub">Error: ${String(e.message)}</td></tr>`; return; }
+    const q = (document.getElementById('q').value||"").toLowerCase();
+    const filtered = list.filter(b=>{
+      const ref = b.bookingRef || b.id || "";
+      const s = `${ref} ${b.from||""} ${b.to||""} ${b.contactEmail||(b.contact&&b.contact.email)||""} ${b.contactName||(b.contact&&b.contact.name)||""} ${(b.contact&&b.contact.phone)||""}`.toLowerCase();
+      return !q || s.includes(q);
+    });
+    document.getElementById('tbody').innerHTML = filtered.map(b=>{
+      const ref = b.bookingRef || b.id;
+      const status = b.status || "";
+      const pay = (b.paymentStatus||"").toLowerCase();
+      const isPaid = pay === "paid";
+      const isCancelled = status === "CANCELLED";
+      return `
+      <tr>
+        <td class="sub">${(b.createdAt||"").slice(0,16).replace("T"," ")}</td>
+        <td><b>${ref}</b></td>
+        <td>${(b.from && b.to) ? (b.from + " → " + b.to) : (b.from||b.to||"-")}</td>
+        <td>${b.dateStr||b.date||"-"}</td>
+        <td><span class="badge ${isCancelled?'bad':isPaid?'ok':'warn'}">${status}</span></td>
+        <td><span class="badge ${isPaid?'ok':pay==='failed'?'bad':'warn'}">${b.paymentStatus||'unpaid'}</span></td>
+        <td class="sub">${b.contactName||(b.contact&&b.contact.name)||"-"} • ${b.contactEmail||(b.contact&&b.contact.email)||"-"}</td>
+        <td class="actions">
+          <button class="btn small" onclick="openDetail('${ref.replace(/'/g,"\\'")}')">Open</button>
+          ${!isPaid ? `<button class="btn small" onclick="setPay('${ref.replace(/'/g,"\\'")}','PAID')">Mark Paid</button>` : ""}
+          ${!isCancelled ? `<button class="btn small danger" onclick="setStatus('${ref.replace(/'/g,"\\'")}','CANCELLED')">Cancel</button>` : ""}
+        </td>
+      </tr>
+    `;
+    }).join("") || `<tr><td colspan="8" class="sub">No bookings yet</td></tr>`;
+  }
+
+  // defaults
+  var dateEl = document.getElementById('date');
+  if (dateEl) {
+    dateEl.value = toLocalDateStr(new Date());
+    dateEl.addEventListener('change', function(){ hydrateInventory(); });
+  }
+  (async function(){
+    await loadOpsOrigins();
+    var hint = document.getElementById('opsSignInHint');
+    if (hint) hint.style.display = API_BASE ? 'none' : 'block';
+    await hydrateInventory();
+    await render();
+  })();
+</script>
+</body></html>

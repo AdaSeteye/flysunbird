@@ -1,0 +1,98 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="../admin_assets/module.css"/>
+</head>
+<body>
+<div class="wrap">
+  <div class="hrow">
+    <div>
+      <h1>Payments</h1>
+      <div class="sub">Payment records from the backend (Cybersource, manual mark-paid). View booking in Bookings Inbox.</div>
+    </div>
+    <div class="actions">
+      <input id="q" placeholder="Filter by booking ref…" style="max-width:240px" oninput="render()"/>
+      <button class="btn" type="button" data-label="Refresh" onclick="refreshWithFeedback(this)">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="overflow:auto">
+      <table class="table">
+        <thead><tr><th>Created</th><th>Booking Ref</th><th>Provider</th><th>Status</th><th>Amount</th><th>Actions</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../admin_assets/ops_bookings.js"></script>
+<script>
+  const ONLINE = !!(localStorage.getItem("FSB_API_BASE") || window.API_BASE);
+  const API_BASE = (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
+
+  async function refreshWithFeedback(btn){
+    if(btn){ btn.disabled=true; btn.textContent='Loading…'; }
+    try { await render(); } finally { if(btn){ btn.disabled=false; btn.textContent=btn.dataset.label||'Refresh'; } }
+  }
+
+  async function refreshToken(){
+    var ref = localStorage.getItem("FSB_REFRESH_TOKEN");
+    if (!API_BASE || !ref) return false;
+    try {
+      var r = await fetch(API_BASE + "/auth/refresh?refresh_token=" + encodeURIComponent(ref), { method: "POST", headers: { "Content-Type": "application/json" } });
+      if (!r.ok) return false;
+      var d = await r.json();
+      if (d.access_token) { localStorage.setItem("FSB_TOKEN", d.access_token); if (d.refresh_token) localStorage.setItem("FSB_REFRESH_TOKEN", d.refresh_token); return true; }
+    } catch (e) {}
+    return false;
+  }
+
+  async function fetchPayments(retried){
+    if (!ONLINE || !API_BASE) return [];
+    var token = localStorage.getItem("FSB_TOKEN") || "";
+    var res = await fetch(API_BASE + "/ops/payments", { headers: { "Authorization": "Bearer " + token } });
+    if (res.status === 401 && !retried && await refreshToken()) return fetchPayments(true);
+    if (!res.ok) throw new Error(await res.text());
+    return await res.json();
+  }
+
+  async function render(){
+    const tbody = document.getElementById("tbody");
+    const q = (document.getElementById("q") && document.getElementById("q").value || "").toLowerCase();
+    if (ONLINE) {
+      try {
+        let list = await fetchPayments();
+        if (q) list = list.filter(p => (p.bookingRef || "").toLowerCase().includes(q));
+        tbody.innerHTML = list.map(p => `
+          <tr>
+            <td class="sub">${(p.createdAt||"").slice(0,16).replace("T"," ")}</td>
+            <td><b>${p.bookingRef || "—"}</b></td>
+            <td>${p.provider || "—"}</td>
+            <td><span class="badge ${p.status==='paid'?'ok':p.status==='failed'?'bad':'warn'}">${p.status || "—"}</span></td>
+            <td>${p.currency || "USD"} ${Number(p.amountUSD||0).toFixed(0)}</td>
+            <td class="actions">
+              <a class="btn small" href="../fly/confirmation.html?ref=${encodeURIComponent(p.bookingRef||'')}" target="_blank">View booking</a>
+            </td>
+          </tr>
+        `).join("") || "<tr><td colspan='6' class='sub'>No payments yet</td></tr>";
+      } catch (e) {
+        tbody.innerHTML = "<tr><td colspan='6' class='sub'>Error: " + (e.message || String(e)) + "</td></tr>";
+      }
+      return;
+    }
+    const list = OpsBookings.load().filter(b => !q || (b.id||"").toLowerCase().includes(q));
+    tbody.innerHTML = list.map(b => `
+      <tr>
+        <td class="sub">${(b.createdAt||"").slice(0,16).replace("T"," ")}</td>
+        <td><b>${b.id}</b></td>
+        <td>—</td>
+        <td><span class="badge ${b.paymentStatus==='PAID'?'ok':b.paymentStatus==='FAILED'?'bad':'warn'}">${b.paymentStatus||"—"}</span></td>
+        <td>—</td>
+        <td class="actions"><a class="btn small" href="../fly/confirmation.html?ref=${encodeURIComponent(b.id)}" target="_blank">View</a></td>
+      </tr>
+    `).join("") || "<tr><td colspan='6' class='sub'>Sign in to view payments.</td></tr>";
+  }
+  render();
+</script>
+</body></html>

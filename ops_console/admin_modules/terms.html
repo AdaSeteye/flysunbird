@@ -1,0 +1,89 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="../admin_assets/module.css"/>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hrow">
+      <div>
+        <h1>Terms</h1>
+        <div class="sub">Client session uses termsAcceptance.version + docSha256 (from fly/assets/storage.js).</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:900">Current Terms</div>
+      <div class="hr"></div>
+      <div class="row">
+        <div><label>Version</label><input id="ver"/></div>
+        <div><label>docSha256</label><input id="sha"/></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div style="grid-column:1/-1"><label>URL (page/PDF)</label><input id="url" placeholder="fly/terms-and-conditions.html"/></div>
+      </div>
+      <div class="actions" style="margin-top:10px">
+        <button class="btn primary" onclick="save()">Save</button>
+        <a class="btn ghost" href="../fly/terms-and-conditions.html" target="_blank">Open Terms Page</a>
+        <span id="msg" class="sub" style="margin-left:12px"></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:900">Backend storage</div>
+      <div class="sub">
+        Terms are stored in the backend when connected. Client booking flow uses version/docSha256 for consent. Store terms version at booking time for legal audit.
+      </div>
+    </div>
+  </div>
+
+  <script src="../admin_assets/admin_store.js"></script>
+  <script src="../admin_assets/ops_api.js"></script>
+  <script>
+    const ONLINE = !!(localStorage.getItem("FSB_API_BASE") || window.API_BASE);
+
+    async function load() {
+      if (ONLINE && window.OpsApi) {
+        try {
+          const t = await OpsApi.fetch("GET", "/ops/settings/terms");
+          document.getElementById('ver').value = t.version || "2025";
+          document.getElementById('sha').value = t.docSha256 || "";
+          document.getElementById('url').value = t.url || "fly/terms-and-conditions.html";
+          return;
+        } catch (e) {
+          console.warn("Terms API failed, using local", e);
+        }
+      }
+      const t = AdminStore.getTerms();
+      document.getElementById('ver').value = t.version || "2025";
+      document.getElementById('sha').value = t.docSha256 || "";
+      document.getElementById('url').value = t.url || "fly/terms-and-conditions.html";
+    }
+
+    function render() {
+      load();
+    }
+
+    async function save() {
+      const ver = document.getElementById('ver').value.trim();
+      const sha = document.getElementById('sha').value.trim();
+      const url = document.getElementById('url').value.trim();
+      if (!ver || !sha) return alert("Version + docSha256 required");
+      if (ONLINE && window.OpsApi) {
+        try {
+          await OpsApi.fetch("POST", "/ops/settings/terms", { version: ver, docSha256: sha, url: url || "fly/terms-and-conditions.html" });
+          document.getElementById('msg').textContent = "Saved to backend";
+          setTimeout(() => { document.getElementById('msg').textContent = ""; }, 3000);
+        } catch (e) {
+          alert(e.message || "Failed to save");
+        }
+      } else {
+        AdminStore.setTerms({ version: ver, docSha256: sha, url: url || "fly/terms-and-conditions.html" });
+        document.getElementById('msg').textContent = "Saved (local only)";
+        setTimeout(() => { document.getElementById('msg').textContent = ""; }, 3000);
+      }
+    }
+
+    render();
+  </script>
+</body></html>

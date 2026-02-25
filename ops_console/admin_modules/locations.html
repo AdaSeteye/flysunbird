@@ -1,0 +1,154 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="../admin_assets/module.css"/>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hrow">
+      <div>
+        <h1>Locations</h1>
+        <div class="sub">This matches your booking From dropdown structure (Region → Sub locations).</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:900">Add Location</div>
+      <div class="hr"></div>
+      <div class="row">
+        <div><label>Region</label><input id="region" placeholder="e.g. Tanzania"/></div>
+        <div><label>Code</label><input id="code" placeholder="e.g. DAR"/></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>Name</label><input id="name" placeholder="e.g. Dar es Salaam"/></div>
+        <div><label>Sub locations (comma-separated)</label><input id="subs" placeholder="City Center, Airport"/></div>
+      </div>
+      <div class="actions" style="margin-top:10px">
+        <button class="btn primary" onclick="add()">Add</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="hrow">
+        <div style="font-weight:900">Locations list</div>
+        <div class="actions">
+          <input id="q" placeholder="Search…" style="max-width:260px" oninput="render()"/>
+        </div>
+      </div>
+      <div class="hr"></div>
+      <div style="overflow:auto">
+        <table class="table">
+          <thead><tr><th>Region</th><th>Code</th><th>Name</th><th>Sub locations</th><th>State</th><th>Actions</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script src="../admin_assets/admin_store.js"></script>
+  <script src="../admin_assets/ops_api.js"></script>
+  <script>
+    const ONLINE = !!(localStorage.getItem("FSB_API_BASE") || window.API_BASE);
+
+    async function listLocations() {
+      if (ONLINE && window.OpsApi) {
+        try {
+          return await OpsApi.fetch("GET", "/ops/locations");
+        } catch (e) {
+          console.warn("Locations API failed, using local", e);
+        }
+      }
+      return AdminStore.listLocations();
+    }
+
+    async function add() {
+      const region = document.getElementById('region').value.trim();
+      const code = document.getElementById('code').value.trim();
+      const name = document.getElementById('name').value.trim();
+      const subs = document.getElementById('subs').value.split(',').map(s=>s.trim()).filter(Boolean);
+      if (!region || !code || !name) return alert("Region/Code/Name required");
+      if (ONLINE && window.OpsApi) {
+        try {
+          await OpsApi.fetch("POST", "/ops/locations", { region, code, name, subs, active: true });
+          document.getElementById('region').value = "";
+          document.getElementById('code').value = "";
+          document.getElementById('name').value = "";
+          document.getElementById('subs').value = "";
+          await render();
+        } catch (e) {
+          alert(e.message || "Failed to add");
+        }
+      } else {
+        await AdminStore.addLocation({ region, code, name, subs });
+        document.getElementById('region').value = "";
+        document.getElementById('code').value = "";
+        document.getElementById('name').value = "";
+        document.getElementById('subs').value = "";
+        render();
+      }
+    }
+
+    async function toggle(id) {
+      const rows = await listLocations();
+      const x = rows.find(a => a.id === id);
+      if (!x) return;
+      if (ONLINE && window.OpsApi) {
+        try {
+          await OpsApi.fetch("PATCH", "/ops/locations/" + encodeURIComponent(id), { active: !x.active });
+          await render();
+        } catch (e) {
+          alert(e.message || "Failed");
+        }
+      } else {
+        await AdminStore.updateLocation(id, { active: !x.active });
+        render();
+      }
+    }
+
+    async function del(id) {
+      if (!confirm("Delete location?")) return;
+      if (ONLINE && window.OpsApi) {
+        try {
+          await OpsApi.fetch("DELETE", "/ops/locations/" + encodeURIComponent(id));
+          await render();
+        } catch (e) {
+          alert(e.message || "Failed");
+        }
+      } else {
+        await AdminStore.deleteLocation(id);
+        render();
+      }
+    }
+
+    async function render() {
+      const q = (document.getElementById('q').value || "").toLowerCase();
+      let rows = [];
+      try {
+        rows = await listLocations();
+      } catch (e) {
+        rows = AdminStore.listLocations();
+      }
+      rows = rows.filter(l => {
+        const subs = Array.isArray(l.subs) ? l.subs : (typeof l.subs === 'string' ? l.subs.split(',').map(s=>s.trim()) : []);
+        const s = `${l.region || ''} ${l.code || ''} ${l.name || ''} ${subs.join(' ')}`.toLowerCase();
+        return !q || s.includes(q);
+      });
+      document.getElementById('tbody').innerHTML = rows.map(l => {
+        const subs = Array.isArray(l.subs) ? l.subs : (typeof l.subs === 'string' ? l.subs.split(',').map(s=>s.trim()).filter(Boolean) : []);
+        return `<tr>
+          <td>${l.region || ''}</td>
+          <td><b>${l.code || ''}</b></td>
+          <td>${l.name || ''}</td>
+          <td class="sub">${subs.join(", ")}</td>
+          <td>${l.active !== false ? '<span class="badge ok">ACTIVE</span>' : '<span class="badge warn">HIDDEN</span>'}</td>
+          <td class="actions">
+            <button class="btn small" onclick="toggle('${(l.id||'').replace(/'/g,"\\'")}')">${l.active !== false ? 'Hide' : 'Activate'}</button>
+            <button class="btn small danger" onclick="del('${(l.id||'').replace(/'/g,"\\'")}')">Delete</button>
+          </td>
+        </tr>`;
+      }).join("") || '<tr><td colspan="6" class="sub">No locations</td></tr>';
+    }
+
+    render();
+  </script>
+</body></html>

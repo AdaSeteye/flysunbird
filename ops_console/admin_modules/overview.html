@@ -1,0 +1,131 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="../admin_assets/module.css"/>
+  <style>
+    .chart-bars{max-height:280px;overflow-y:auto}
+    .chart-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;font-size:12px}
+    .chart-label{width:96px;flex-shrink:0;color:var(--muted)}
+    .chart-bar-wrap{flex:1;min-width:0;height:20px;background:rgba(255,255,255,0.08);border-radius:6px;overflow:hidden}
+    .chart-bar{height:100%;border-radius:6px;min-width:2px;transition:width .2s}
+    .chart-bar.bookings{background:linear-gradient(90deg,rgba(56,189,248,0.6),rgba(56,189,248,0.9))}
+    .chart-bar.revenue{background:linear-gradient(90deg,rgba(34,197,94,0.5),rgba(34,197,94,0.85))}
+    .chart-value{width:52px;text-align:right;flex-shrink:0;font-weight:700}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hrow">
+      <div>
+        <h1>Overview</h1>
+        <div class="sub">Operations view only. No developer payloads or test codes are shown here.</div>
+      </div>
+      <div class="actions">
+        <button class="btn" type="button" data-label="Refresh" onclick="refreshWithFeedback(this)">Refresh</button>
+      </div>
+    </div>
+
+    <div class="card" id="kpis"></div>
+
+    <div class="card" id="chartSection" style="display:none">
+      <div style="font-weight:900;margin-bottom:8px">Bookings by day</div>
+      <div class="chart-bars" id="chartBookings"></div>
+      <div style="font-weight:900;margin:16px 0 8px">Revenue by day (USD)</div>
+      <div class="chart-bars" id="chartRevenue"></div>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:900">What Ops can do here</div>
+      <div class="hr"></div>
+      <ul class="sub" style="margin:0;padding-left:18px;line-height:1.6">
+        <li>Create <b>bookings</b> with full passenger data</li>
+        <li>Generate a <b>payment link</b> and share it to customers</li>
+        <li>Auto-reduce inventory seats when booking is created/confirmed</li>
+        <li>Confirm / Cancel bookings</li>
+      </ul>
+    </div>
+
+    <div class="card">
+      <div style="font-weight:900">Data source</div>
+      <div class="sub">Counts are from the API. Sign in to view data.</div>
+    </div>
+  </div>
+
+  <script src="../admin_assets/ops_inventory.js"></script>
+  <script src="../admin_assets/ops_bookings.js"></script>
+  <script>
+    const API_BASE = (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
+    const hasAuth = !!(API_BASE && localStorage.getItem("FSB_TOKEN"));
+
+    async function refreshWithFeedback(btn){
+      if(btn){ btn.disabled=true; btn.textContent='Loading…'; }
+      try { await render(); } finally { if(btn){ btn.disabled=false; btn.textContent=btn.dataset.label||'Refresh'; } }
+    }
+
+    async function refreshToken(){
+      var ref = localStorage.getItem("FSB_REFRESH_TOKEN");
+      if (!API_BASE || !ref) return false;
+      try {
+        var r = await fetch(API_BASE + "/auth/refresh?refresh_token=" + encodeURIComponent(ref), { method: "POST", headers: { "Content-Type": "application/json" } });
+        if (!r.ok) return false;
+        var d = await r.json();
+        if (d.access_token) { localStorage.setItem("FSB_TOKEN", d.access_token); if (d.refresh_token) localStorage.setItem("FSB_REFRESH_TOKEN", d.refresh_token); return true; }
+      } catch (e) {}
+      return false;
+    }
+
+    function computeTodayStatsFromRules(rules) {
+      var now = new Date();
+      var weekday = (now.getUTCDay() + 6) % 7;
+      var inventorySlots = 0, seatsAvailable = 0;
+      (rules || []).forEach(function(r) {
+        if (!r.active) return;
+        var days = (r.days_of_week || "").split(",").map(function(x){ return parseInt(x.trim(), 10); }).filter(function(n){ return !isNaN(n); });
+        if (days.indexOf(weekday) === -1) return;
+        var times = (r.times || "").split(",").filter(function(t){ return t.trim(); });
+        var n = times.length;
+        var cap = parseInt(r.capacity, 10) || 0;
+        inventorySlots += n;
+        seatsAvailable += n * cap;
+      });
+      return { inventorySlots: inventorySlots, seatsAvailable: seatsAvailable };
+    }
+
+    async function render(){
+      if (hasAuth) {
+        try {
+          var token = localStorage.getItem("FSB_TOKEN") || "";
+          var bookingsRes = await fetch(API_BASE + "/ops/bookings", { headers: { "Authorization": "Bearer " + token } });
+          var statsRes = await fetch(API_BASE + "/ops/dashboard/today-stats", { headers: { "Authorization": "Bearer " + token } });
+          if (bookingsRes.status === 401 && await refreshToken()) {
+            token = localStorage.getItem("FSB_TOKEN");
+            bookingsRes = await fetch(API_BASE + "/ops/bookings", { headers: { "Authorization": "Bearer " + token } });
+            statsRes = await fetch(API_BASE + "/ops/dashboard/today-stats", { headers: { "Authorization": "Bearer " + token } });
+          }
+          var list = bookingsRes.ok ? await bookingsRes.json() : [];
+          var stats = statsRes.ok ? await statsRes.json() : null;
+          if (!stats && statsRes.status === 404) {
+            var rulesRes = await fetch(API_BASE + "/ops/slot-rules", { headers: { "Authorization": "Bearer " + token } });
+            var rules = rulesRes.ok ? await rulesRes.json() : [];
+            stats = computeTodayStatsFromRules(rules);
+          }
+          if (!stats) stats = { inventorySlots: 0, seatsAvailable: 0 };
+          var pending = list.filter(function(b){ return (b.paymentStatus || "").toLowerCase() !== "paid"; }).length;
+          document.getElementById('kpis').innerHTML =
+            '<div class="grid">' +
+            '<div class="card" style="margin:0"><div class="sub">Inventory slots (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + (stats.inventorySlots || 0) + '</div></div>' +
+            '<div class="card" style="margin:0"><div class="sub">Seats available (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + (stats.seatsAvailable || 0) + '</div></div>' +
+            '<div class="card" style="margin:0"><div class="sub">Bookings</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + list.length + '</div></div>' +
+            '<div class="card" style="margin:0"><div class="sub">Pending payment</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + pending + '</div></div>' +
+            '</div>';
+          return;
+        } catch (e) {
+          document.getElementById('kpis').innerHTML = '<div class="sub">Error loading: ' + (e.message || String(e)) + '</div>';
+          return;
+        }
+      }
+      document.getElementById('kpis').innerHTML = '<div class="sub">Sign in to view overview.</div>';
+    }
+    render();
+  </script>
+</body></html>

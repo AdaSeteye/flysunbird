@@ -1,0 +1,47 @@
+# Environment and secrets (never commit)
+.env
+.env.local
+.env.*.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Build / dist
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Logs and debug
+*.log
+/tmp/
+
+# Data and tickets (local storage)
+data/
+*.db
+*.sqlite3
+
+# Alembic (keep versions, ignore local state if any)
+# alembic/versions/ is usually committed
+
+# Node (if any frontend tooling later)
+node_modules/
+
+# Coverage / test
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/

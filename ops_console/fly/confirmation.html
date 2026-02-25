@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FlySunbird • Booking Confirmation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <section class="hero confirm-v2">
+      <div class="confirm-hero">
+        <div class="hero-left">
+          <div class="status-pill" id="statusPill">
+            <span class="dot" aria-hidden="true"></span>
+            <span id="statusText">Booking Confirmed</span>
+          </div>
+
+          <h1 class="confirm-title-v2">You’re all set ✈️</h1>
+          <p class="confirm-sub-v2">
+            Keep your booking reference handy for check-in and support.
+          </p>
+
+          <div id="emptyStateHint" class="card" style="display:none;margin-bottom:16px;padding:16px;background:rgba(255,255,255,0.06);border-radius:12px;">
+            <div class="sub">No booking loaded. Add <code>?ref=YOUR_BOOKING_REF</code> to the URL to view a booking, or complete a booking to see details here.</div>
+          </div>
+
+          <div class="ref-card">
+            <div>
+              <div class="ref-label">Booking Reference</div>
+              <div class="ref-code" id="refCode">—</div>
+            </div>
+            <div class="ref-actions">
+              <button class="btn" id="copyRefBtn" type="button">Copy</button>
+              <button class="btn" id="ticketBtn" type="button">View Ticket</button>
+              <button class="btn primary" id="manageBtn" type="button">Manage Booking</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="hero-right">
+          <div class="mini-card">
+            <div class="mini-k">Payment Status</div>
+            <div class="mini-v" id="payStatus">—</div>
+            <div class="mini-meta">
+              <div><span class="muted">Method:</span> <span id="payMethod">—</span></div>
+              <div><span class="muted">Amount:</span> <span id="payAmount">—</span></div>
+            </div>
+          </div>
+
+          <div class="action-grid">
+            <button class="btn soft" id="downloadItinBtn" type="button">Download Itinerary</button>
+            <button class="btn soft" id="downloadInvoiceBtn" type="button">Download Receipt / Invoice</button>
+            <button class="btn soft" id="addCalendarBtn" type="button">Add to Calendar</button>
+            <button class="btn soft" id="shareBtn" type="button">Share</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="confirm-grid">
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Trip Details</h2>
+            <span class="badge" id="cabinBadge">—</span>
+          </div>
+
+          <div class="trip-row">
+            <div class="trip-col">
+              <div class="muted">From</div>
+              <div class="trip-strong" id="fromCity">—</div>
+              <div class="muted small" id="fromAirport">—</div>
+            </div>
+
+           
+            <div class="trip-col">
+              <div class="muted">To</div>
+              <div class="trip-strong" id="toCity">—</div>
+              <div class="muted small" id="toAirport">—</div>
+            </div>
+          </div>
+
+          <div class="kv-grid">
+            <div class="kv">
+              <div class="muted small">Date</div>
+              <div class="kv-v" id="flightDate">—</div>
+            </div>
+            <div class="kv">
+              <div class="muted small">Departure</div>
+              <div class="kv-v" id="depTime">—</div>
+            </div>
+            <div class="kv">
+              <div class="muted small">Arrival</div>
+              <div class="kv-v" id="arrTime">—</div>
+            </div>
+            <div class="kv">
+              <div class="muted small">Flight</div>
+              <div class="kv-v" id="flightNo">—</div>
+            </div>
+            <div class="kv">
+              <div class="muted small">Baggage</div>
+              <div class="kv-v" id="baggage">—</div>
+            </div>
+            <div class="kv">
+              <div class="muted small">Check-in</div>
+              <div class="kv-v" id="checkin">—</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Passengers</h2>
+            <span class="badge" id="paxCount">0</span>
+          </div>
+
+          <div class="pax-list-v2" id="paxList"></div>
+        </div>
+
+        <div class="panel panel-wide">
+          <div class="panel-head">
+          <div class="support-strip">
+            <div>
+              <div class="support-t">Need help?</div>
+              <div class="muted small">Share your booking reference with support for faster service.</div>
+            </div>
+            <button class="btn" id="copyRefBtn2" type="button">Copy Reference</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="confirm-footer-actions">
+        <button class="btn" id="newBookingBtn" type="button">New booking</button>
+        <button class="btn" id="backToPaymentBtn" type="button">Back to payment</button>
+      </div>
+
+    </section>
+  </main>
+
+  <script src="assets/storage.js"></script>
+  <script src="assets/confirmation.js"></script>
+</body>
+</html>

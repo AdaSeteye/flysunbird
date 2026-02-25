@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FlySunBird • Ops/Admin</title>
+  <script>
+    (function(){
+      var token = localStorage.getItem("FSB_TOKEN");
+      var apiBase = localStorage.getItem("FSB_API_BASE");
+      if (!token || !apiBase) { window.location.replace("login.html"); return; }
+    })();
+  </script>
+  <link rel="stylesheet" href="./admin_assets/admin.css"/>
+</head>
+<body class="admin">
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="sb-head">
+        <div class="sb-logo">FSB</div>
+        <div>
+          <div class="sb-title">FlySunBird</div>
+          <div class="sb-sub">Ops/Admin Console</div>
+        </div>
+      </div>
+
+      <nav class="nav" id="nav">
+        <a class="nav-link active" data-roles="ops,admin,superadmin,finance" href="#" onclick="openModule('./admin_modules/overview.html', this); return false;">
+          <span>📊</span><span>Overview</span>
+        </a>
+        <a class="nav-link" data-roles="ops,admin,superadmin" href="#" onclick="openModule('./admin_modules/inventory.html', this); return false;">
+          <span>📦</span><span>Inventory (Ops)</span>
+        </a>
+        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="#" onclick="openModule('./admin_modules/bookings.html', this); return false;">
+          <span>📥</span><span>Bookings Inbox</span>
+        </a>
+        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="#" onclick="openModule('./admin_modules/payments.html', this); return false;">
+          <span>💳</span><span>Payments</span>
+        </a>
+        <a class="nav-link" data-roles="ops,admin,superadmin" href="#" onclick="openModule('./admin_modules/payment-config.html', this); return false;">
+          <span>⚙️</span><span>Payment &amp; Ticket config</span>
+        </a>
+
+        <div class="sep"></div>
+
+        <a class="nav-link" data-roles="ops,admin,superadmin" href="#" onclick="openModule('./admin_modules/locations.html', this); return false;">
+          <span>📍</span><span>Service Locations</span>
+        </a>
+        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="#" onclick="openModule('./admin_modules/fx.html', this); return false;">
+          <span>💱</span><span>Currency / FX</span>
+        </a>
+        <a class="nav-link" data-roles="ops,admin,superadmin" href="#" onclick="openModule('./admin_modules/terms.html', this); return false;">
+          <span>📄</span><span>Terms</span>
+        </a>
+
+        <div class="sep"></div>
+
+        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="./fly/booking.html" target="_blank">
+          <span>👤</span><span>Open Client Booking</span>
+        </a>
+        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="./fly/passenger.html" target="_blank">
+          <span>🧍</span><span>Open Passenger Form</span>
+        </a>
+        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="./fly/payment.html" target="_blank">
+          <span>💳</span><span>Open Payment Page</span>
+        </a>
+        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="./fly/ticket.html" target="_blank">
+          <span>🎫</span><span>Open Ticket Page</span>
+        </a>
+      </nav>
+
+      <div class="sb-foot">
+        <div class="tiny">
+          This Ops UI focuses on <b>booker-captured data</b> and Ops actions (confirm/cancel/mark-paid).
+          <a href="login.html" style="color:var(--muted)">Sign out</a>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="crumb" id="crumb">Overview</div>
+        <div class="top-actions">
+          <button class="btn ghost" type="button" onclick="openModule('./admin_modules/bookings.html');">Bookings</button>
+          <button class="btn" type="button" onclick="window.open('./fly/booking.html','_blank')">Open Client</button>
+        </div>
+      </header>
+
+      <section class="panel">
+        <iframe id="moduleFrame" class="frame" src="./admin_modules/overview.html" loading="lazy"></iframe>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    if (!localStorage.getItem("FSB_TOKEN") || !localStorage.getItem("FSB_API_BASE")) {
+      window.location.replace("login.html");
+      throw new Error("Redirecting to login");
+    }
+    let userRole = null;
+    (async function initRoleFilter(){
+      const apiBase = (localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
+      const token = localStorage.getItem("FSB_TOKEN") || "";
+      if (!apiBase || !token) return;
+      try {
+        const res = await fetch(apiBase + "/auth/me", { headers: { "Authorization": "Bearer " + token } });
+        if (res.ok) {
+          const me = await res.json();
+          userRole = (me.role || "").toLowerCase();
+          if (userRole === "pilot") {
+            window.location.replace("pilot-dashboard.html");
+            return;
+          }
+          document.querySelectorAll('.nav-link[data-roles], .nav .sep').forEach(el => {
+            if (el.classList.contains('sep')) return;
+            const roles = (el.getAttribute('data-roles') || "").split(',').map(r => r.trim().toLowerCase());
+            el.style.display = roles.length && roles.includes(userRole) ? "" : "none";
+          });
+          const firstVisible = document.querySelector('.nav-link[data-roles]:not([style*="display: none"])');
+          if (firstVisible && !document.querySelector('.nav-link.active:not([style*="display: none"])')) {
+            firstVisible.click();
+          }
+        }
+      } catch (_) {}
+    })();
+
+    function openModule(url, el){
+      const frame = document.getElementById('moduleFrame');
+      const crumb = document.getElementById('crumb');
+
+      if(el){
+        document.querySelectorAll('.nav-link').forEach(a => a.classList.remove('active'));
+        el.classList.add('active');
+        crumb.textContent = el.innerText.trim();
+      } else {
+        const name = (url.split('/').pop() || url).replace('.html','').replace(/[-_]/g,' ');
+        crumb.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+      }
+
+      frame.style.opacity = '0';
+      setTimeout(() => {
+        frame.src = url;
+        frame.onload = () => { frame.style.opacity = '1'; };
+      }, 120);
+    }
+  </script>
+</body>
+</html>

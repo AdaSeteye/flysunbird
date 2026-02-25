@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>FlySunbird • Ops Login</title>
+  <link rel="stylesheet" href="./admin_assets/admin.css"/>
+  <style>
+    .login-wrap { max-width: 400px; margin: 80px auto; padding: 24px; }
+    .login-wrap h1 { margin: 0 0 8px; font-weight: 900; }
+    .login-wrap .sub { color: var(--muted); margin-bottom: 24px; }
+    .login-wrap label { display: block; margin-top: 14px; font-weight: 600; }
+    .login-wrap input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--text); margin-top: 6px; }
+    .login-wrap .btn { width: 100%; margin-top: 20px; padding: 14px; }
+    .login-wrap .err { color: #f87171; margin-top: 12px; font-size: 14px; }
+  </style>
+</head>
+<body class="admin">
+  <div class="login-wrap">
+    <h1>Ops / Admin</h1>
+    <p class="sub">Sign in to use the bookings inbox, mark-paid, and cancel actions.</p>
+    <form id="loginForm">
+      <label>API base URL</label>
+      <input type="text" id="apiBase" placeholder="http://localhost:8000/api/v1"/>
+      <label>Email</label>
+      <input type="email" id="email" placeholder="ops@flysunbird.co.tz" required/>
+      <label>Password</label>
+      <input type="password" id="password" placeholder="Password" required/>
+      <button type="submit" class="btn primary" id="submitBtn">Sign in</button>
+    </form>
+    <div class="err" id="err" style="display:none"></div>
+  </div>
+  <script>
+    (function(){
+      const saved = localStorage.getItem("FSB_API_BASE");
+      const input = document.getElementById("apiBase");
+      if (saved) {
+        input.value = saved;
+      } else {
+        var origin = window.location.origin;
+        if (origin && (origin.startsWith("http:") || origin.startsWith("https:")))
+          input.value = origin + "/api/v1";
+        else
+          input.value = "http://localhost:8000/api/v1";
+      }
+    })();
+    document.getElementById("loginForm").addEventListener("submit", async function(e){
+      e.preventDefault();
+      let apiBase = (document.getElementById("apiBase").value || "").trim().replace(/\/+$/, "");
+      if (apiBase && !/\/api\/v1$/i.test(apiBase)) apiBase = apiBase + "/api/v1";
+      const email = (document.getElementById("email").value || "").trim();
+      const password = document.getElementById("password").value;
+      const errEl = document.getElementById("err");
+      const btn = document.getElementById("submitBtn");
+      errEl.style.display = "none";
+      if (!apiBase) { errEl.textContent = "API base URL is required."; errEl.style.display = "block"; return; }
+      btn.disabled = true;
+      try {
+        const res = await fetch(apiBase + "/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          errEl.textContent = (data.detail || data.message || res.statusText) || "Login failed.";
+          errEl.style.display = "block";
+          btn.disabled = false;
+          return;
+        }
+        const token = data.access_token;
+        const refreshToken = data.refresh_token;
+        if (!token) { errEl.textContent = "No token in response."; errEl.style.display = "block"; btn.disabled = false; return; }
+        localStorage.setItem("FSB_API_BASE", apiBase);
+        localStorage.setItem("FSB_TOKEN", token);
+        if (refreshToken) localStorage.setItem("FSB_REFRESH_TOKEN", refreshToken);
+        // Fetch user role and redirect pilots to pilot dashboard
+        try {
+          const meRes = await fetch(apiBase + "/auth/me", {
+            headers: { "Authorization": "Bearer " + token }
+          });
+          if (meRes.ok) {
+            const meData = await meRes.json();
+            if (meData.role === "pilot") {
+              window.location.href = "pilot-dashboard.html";
+              return;
+            }
+          }
+        } catch (_) {}
+        window.location.href = "admin-dashboard.html";
+      } catch (err) {
+        errEl.textContent = err.message || "Network error.";
+        errEl.style.display = "block";
+        btn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
