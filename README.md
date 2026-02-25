@@ -51,8 +51,4 @@ Open your UI without editing it:
 Seat-hold expiry runs automatically (Celery beat every minute).
 Slot generation runs automatically (every 6 hours) using `slot_rules`.
 
-## Default users
-- admin@flysunbird.local / admin12345
-- ops@flysunbird.local / ops12345
-- finance@flysunbird.local / finance12345
-- pilot@flysunbird.local / pilot12345
+
