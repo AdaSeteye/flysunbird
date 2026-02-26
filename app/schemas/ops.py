@@ -25,6 +25,29 @@ class TimeEntryOut(TimeEntryIn):
     from_label: Optional[str] = None
     to_label: Optional[str] = None
 
+
+class SlotFillItem(BaseModel):
+    """One slot to create for a given route and date."""
+    start: str = Field(description="HH:MM")
+    end: str = Field(description="HH:MM")
+    price_usd: int = Field(ge=1, description="Price per seat USD")
+    seats_available: int = Field(ge=1, le=99, description="Capacity")
+    flight_no: str = "FSB"
+    cabin: str = "Economy"
+
+
+class SlotsFillRequest(BaseModel):
+    """Fill slots for a single day: route + date + list of slot definitions."""
+    route_id: str
+    date_str: str = Field(description="YYYY-MM-DD")
+    slots: List[SlotFillItem] = Field(min_length=1, description="At least one slot")
+
+
+class SlotsFillResponse(BaseModel):
+    created: int
+    ids: List[str] = Field(default_factory=list)
+
+
 class SlotRuleIn(BaseModel):
     route_id: str
     days_of_week: str = "0,1,2,3,4,5,6"

@@ -22,8 +22,9 @@ from app.models.cancellation import Cancellation
 from app.services.email_service import queue_email
 from app.services.audit_service import log_audit
 from app.api.v1.routes.payments import _generate_ticket_for_booking
-from app.schemas.ops import TimeEntryIn, TimeEntryOut, SlotRuleIn, SlotRuleOut, CancellationRequestIn, CancellationDecisionIn, DashboardMetrics, DashboardSeriesPoint, WeeklyPlanImportRequest, WeeklyPlanImportResponse
+from app.schemas.ops import TimeEntryIn, TimeEntryOut, SlotRuleIn, SlotRuleOut, SlotsFillRequest, SlotsFillResponse, CancellationRequestIn, CancellationDecisionIn, DashboardMetrics, DashboardSeriesPoint, WeeklyPlanImportRequest, WeeklyPlanImportResponse
 from app.services.weekly_plan_service import import_weekly_plan, get_preset_legs, PRESETS
+from app.services.settings_service import get_usd_to_tzs_rate
 
 router = APIRouter(tags=["ops"])
 class MoveBookingIn(BaseModel):
@@ -591,6 +592,71 @@ def delete_time_entry(
     db.commit()
     return {"ok": True}
 
+
+@router.post("/ops/slots/fill", response_model=SlotsFillResponse)
+def fill_slots_for_day(
+    body: SlotsFillRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("ops", "admin", "superadmin")),
+):
+    """Create time entries (slots) for a single day and route. Ops fills slots day-by-day; these appear on the customer booking calendar and admin inventory."""
+    route = db.get(Route, body.route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Route not found")
+    rate_tzs = get_usd_to_tzs_rate(db)
+    created_ids = []
+    for s in body.slots:
+        exists = db.query(TimeEntry).filter_by(
+            route_id=body.route_id,
+            date_str=body.date_str,
+            start=s.start.strip(),
+        ).first()
+        if exists:
+            continue
+        te = TimeEntry(
+            id=str(uuid.uuid4()),
+            route_id=body.route_id,
+            date_str=body.date_str,
+            start=s.start.strip(),
+            end=s.end.strip(),
+            price_usd=s.price_usd,
+            price_tzs=int(s.price_usd * rate_tzs) if rate_tzs else None,
+            seats_available=s.seats_available,
+            flight_no=(s.flight_no or "FSB").strip(),
+            cabin=(s.cabin or "Economy").strip(),
+            visibility="PUBLIC",
+            status="PUBLISHED",
+        )
+        db.add(te)
+        created_ids.append(te.id)
+    log_audit(db, user.id, "slots.fill", "time_entry", body.date_str, {"route_id": body.route_id, "created": len(created_ids)})
+    db.commit()
+    return SlotsFillResponse(created=len(created_ids), ids=created_ids)
+
+
+@router.delete("/ops/slots/cleanup-unused")
+def cleanup_unused_slots(
+    origin: str = "",
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("ops", "admin", "superadmin")),
+):
+    """Delete time entries (slots) that have no bookings. Optional origin: only slots for routes with this from_label (e.g. 'Dar es Salaam Airport')."""
+    # Time entry ids that have at least one booking — we must not delete these
+    used_ids = {row[0] for row in db.query(Booking.time_entry_id).filter(Booking.time_entry_id.isnot(None)).distinct().all()}
+    q = db.query(TimeEntry).filter(~TimeEntry.id.in_(used_ids)) if used_ids else db.query(TimeEntry)
+    if origin and origin.strip():
+        route_ids = [row[0] for row in db.query(Route.id).filter(Route.from_label == origin.strip()).all()]
+        if not route_ids:
+            return {"deleted": 0, "message": f"No routes with origin '{origin}'"}
+        q = q.filter(TimeEntry.route_id.in_(route_ids))
+    to_delete = q.all()
+    for te in to_delete:
+        db.delete(te)
+    log_audit(db, user.id, "slots.cleanup_unused", "time_entry", origin or "all", {"deleted": len(to_delete)})
+    db.commit()
+    return {"deleted": len(to_delete)}
+
+
 # -------------------------
 # WEEKLY FLEET OPERATIONS PLAN IMPORT
 # -------------------------
@@ -762,10 +828,32 @@ from app.models.slot_rule import SlotRule
 # -------------------------
 # INVENTORY: ROUTES
 # -------------------------
+# Only these 9 main routes are shown in Fill slots (same as seed ROUTES).
+OPS_MAIN_ROUTES = {
+    ("Dar es Salaam Airport", "Zanzibar Airport"),
+    ("Zanzibar Airport", "Dar es Salaam Airport"),
+    ("Dar es Salaam Airport", "Zanzibar Seacliff"),
+    ("Zanzibar Seacliff", "Zanzibar Airport"),
+    ("Zanzibar Airport", "Zanzibar Nungwi"),
+    ("Zanzibar Nungwi", "Zanzibar Seacliff"),
+    ("Zanzibar Nungwi", "Dar es Salaam Airport"),
+    ("Zanzibar Airport", "Paje"),
+    ("Paje", "Zanzibar Nungwi"),
+}
+
+
 @router.get("/ops/routes")
 def ops_list_routes(db: Session = Depends(get_db), user: User = Depends(require_roles("ops","admin","superadmin"))):
     items = db.query(Route).order_by(Route.created_at.desc()).all()
-    return [{"id":r.id,"from":r.from_label,"to":r.to_label,"region":r.region,"mainRegion": getattr(r,"main_region","MAINLAND"), "subRegion": getattr(r,"sub_region",None), "active":getattr(r,"active",True)} for r in items]
+    seen: set[tuple[str, str]] = set()
+    out = []
+    for r in items:
+        key = (r.from_label or "", r.to_label or "")
+        if key not in OPS_MAIN_ROUTES or key in seen:
+            continue
+        seen.add(key)
+        out.append({"id": r.id, "from": r.from_label, "to": r.to_label, "region": r.region, "mainRegion": getattr(r, "main_region", "MAINLAND"), "subRegion": getattr(r, "sub_region", None), "active": getattr(r, "active", True)})
+    return out
 
 @router.post("/ops/routes")
 def ops_create_route(fromLabel: str, toLabel: str, region: str = "Tanzania", mainRegion: str = "MAINLAND", subRegion: str | None = None, active: bool = True,

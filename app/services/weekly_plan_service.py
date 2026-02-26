@@ -93,38 +93,23 @@ def get_or_create_route(
     return r, True
 
 
-# 5H-FSA preset (0=Mon..6=Sun per schema). Mon: JNIA–AAKI transport + scenic South/West A/B; Fri/Sat/Sun below.
+# 5H-FSA preset (0=Mon..6=Sun per schema). Transport legs only; scenic (same-place) legs removed.
 DEFAULT_PLAN_5H_FSA_LEGS = [
-    # Monday: transport JNIA→AAKI, scenic AAKI→AAKI (South/West A/B), transport AAKI→JNIA
+    # Monday: transport JNIA→AAKI, transport AAKI→JNIA
     {"day_of_week": 0, "from_code": "JNIA", "to_code": "AAKI", "start": "09:30", "end": "10:10", "duration_minutes": 40},
-    {"day_of_week": 0, "from_code": "AAKI", "to_code": "AAKI", "start": "10:30", "end": "10:45", "duration_minutes": 15},
-    {"day_of_week": 0, "from_code": "AAKI", "to_code": "AAKI", "start": "10:50", "end": "11:05", "duration_minutes": 15},
-    {"day_of_week": 0, "from_code": "AAKI", "to_code": "AAKI", "start": "12:00", "end": "12:15", "duration_minutes": 15},
-    {"day_of_week": 0, "from_code": "AAKI", "to_code": "AAKI", "start": "12:20", "end": "12:35", "duration_minutes": 15},
-    {"day_of_week": 0, "from_code": "AAKI", "to_code": "AAKI", "start": "12:40", "end": "12:55", "duration_minutes": 15},
     {"day_of_week": 0, "from_code": "AAKI", "to_code": "JNIA", "start": "13:40", "end": "14:20", "duration_minutes": 40},
-    # Friday: JNIA→AAKI, AAKI→Nungwi, scenic Nungwi→Nungwi (A/B), Nungwi→Seacliff, Seacliff→AAKI, AAKI→JNIA
+    # Friday: JNIA→AAKI, AAKI→Nungwi, Nungwi→Seacliff, Seacliff→AAKI, AAKI→JNIA
     {"day_of_week": 4, "from_code": "JNIA", "to_code": "AAKI", "start": "12:00", "end": "12:40", "duration_minutes": 40},
     {"day_of_week": 4, "from_code": "AAKI", "to_code": "Nungwi", "start": "13:00", "end": "13:30", "duration_minutes": 30},
-    {"day_of_week": 4, "from_code": "Nungwi", "to_code": "Nungwi", "start": "14:15", "end": "14:30", "duration_minutes": 15},
-    {"day_of_week": 4, "from_code": "Nungwi", "to_code": "Nungwi", "start": "14:35", "end": "14:50", "duration_minutes": 15},
     {"day_of_week": 4, "from_code": "Nungwi", "to_code": "Seacliff", "start": "15:35", "end": "16:25", "duration_minutes": 50},
     {"day_of_week": 4, "from_code": "Seacliff", "to_code": "AAKI", "start": "16:40", "end": "17:20", "duration_minutes": 40},
     {"day_of_week": 4, "from_code": "AAKI", "to_code": "JNIA", "start": "17:40", "end": "18:20", "duration_minutes": 40},
-    # Saturday: DAR Scenic JNIA→JNIA (x2), JNIA→Seacliff, scenic Seacliff→Seacliff (x2), transfer Seacliff→AAKI
-    {"day_of_week": 5, "from_code": "JNIA", "to_code": "JNIA", "start": "10:30", "end": "10:45", "duration_minutes": 15},
-    {"day_of_week": 5, "from_code": "JNIA", "to_code": "JNIA", "start": "10:50", "end": "11:05", "duration_minutes": 15},
+    # Saturday: JNIA→Seacliff, transfer Seacliff→AAKI
     {"day_of_week": 5, "from_code": "JNIA", "to_code": "Seacliff", "start": "11:10", "end": "11:25", "duration_minutes": 15},
-    {"day_of_week": 5, "from_code": "Seacliff", "to_code": "Seacliff", "start": "11:30", "end": "11:45", "duration_minutes": 15},
-    {"day_of_week": 5, "from_code": "Seacliff", "to_code": "Seacliff", "start": "11:50", "end": "12:05", "duration_minutes": 15},
     {"day_of_week": 5, "from_code": "Seacliff", "to_code": "AAKI", "start": "12:50", "end": "13:30", "duration_minutes": 40},
-    # Sunday: AAKI→Paje, scenic Paje→Paje (x2), Paje→Nungwi, scenic Nungwi→Nungwi (x2), Nungwi→JNIA
+    # Sunday: AAKI→Paje, Paje→Nungwi, Nungwi→JNIA
     {"day_of_week": 6, "from_code": "AAKI", "to_code": "Paje", "start": "14:25", "end": "14:50", "duration_minutes": 25},
-    {"day_of_week": 6, "from_code": "Paje", "to_code": "Paje", "start": "15:00", "end": "15:15", "duration_minutes": 15},
-    {"day_of_week": 6, "from_code": "Paje", "to_code": "Paje", "start": "15:20", "end": "15:35", "duration_minutes": 15},
     {"day_of_week": 6, "from_code": "Paje", "to_code": "Nungwi", "start": "15:40", "end": "16:05", "duration_minutes": 25},
-    {"day_of_week": 6, "from_code": "Nungwi", "to_code": "Nungwi", "start": "16:50", "end": "17:05", "duration_minutes": 15},
-    {"day_of_week": 6, "from_code": "Nungwi", "to_code": "Nungwi", "start": "17:10", "end": "17:25", "duration_minutes": 15},
     {"day_of_week": 6, "from_code": "Nungwi", "to_code": "JNIA", "start": "17:35", "end": "18:35", "duration_minutes": 60},
 ]
 

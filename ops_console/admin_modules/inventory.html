@@ -123,7 +123,7 @@
     try {
       const rows = await OpsInventory.listRemote(dateStr);
       if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="sub">No slots for this date. Try another date or run slot generation.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="6" class="sub">No slots for this date. Use <strong>Fill slots (daily)</strong> in the sidebar to add slots for a day.</td></tr>';
       } else {
         window.__API_ROWS = rows;
         tbody.innerHTML = rows.map(t => {

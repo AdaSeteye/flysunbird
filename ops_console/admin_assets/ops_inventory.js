@@ -106,8 +106,11 @@ const OpsInventory = (() => {
     return {ok:true, item:x};
   }
 
-async function listRemote(dateStr){
-  const q = dateStr ? `?dateStr=${encodeURIComponent(dateStr)}` : "";
+async function listRemote(dateStr, routeId){
+  const params = new URLSearchParams();
+  if (dateStr) params.set("dateStr", dateStr);
+  if (routeId) params.set("route_id", routeId);
+  const q = params.toString() ? "?" + params.toString() : "";
   return await api("GET", `/ops/time-entries${q}`);
 }
 async function createRemote(payload){

@@ -1,0 +1,189 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="../admin_assets/module.css"/>
+</head>
+<body>
+<div class="wrap">
+  <div class="hrow">
+    <div>
+      <h1>Fill slots (daily)</h1>
+      <div class="sub">Add slots for a route and date. They appear on the customer calendar and in Inventory. Choose route and date, then add slot rows and Save.</div>
+    </div>
+  </div>
+
+  <div id="pickSection" class="card">
+    <div class="hrow">
+      <div style="font-weight:900">Route &amp; date</div>
+      <div class="actions">
+        <label>Route</label>
+        <select id="routeSelect">
+          <option value="">— Select route —</option>
+        </select>
+        <label>Date</label>
+        <input id="fillDate" type="date"/>
+        <button class="btn" type="button" data-label="Load existing" onclick="loadExisting(this)">Load existing</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="slotsSection" class="card">
+    <div class="hrow">
+      <div style="font-weight:900">Slots to create</div>
+      <div class="actions">
+        <button class="btn small" type="button" onclick="addSlotRow()">+ Add slot</button>
+        <button class="btn primary" type="button" data-label="Save" onclick="saveFill(this)">Save</button>
+      </div>
+    </div>
+    <div class="hr"></div>
+    <div style="overflow:auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Start (HH:MM)</th><th>End (HH:MM)</th><th>Price (USD)</th><th>Seats</th><th>Flight no</th><th>Cabin</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="slotsTbody"></tbody>
+      </table>
+    </div>
+    <div id="fillMsg" class="sub" style="margin-top:8px"></div>
+  </div>
+
+  <div id="existingSection" class="card" style="display:none">
+    <div class="hrow">
+      <div style="font-weight:900">Existing slots for this route + date</div>
+    </div>
+    <div class="hr"></div>
+    <div style="overflow:auto">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Time</th><th>Seats</th><th>Price (USD)</th><th>Flight</th><th>Cabin</th>
+          </tr>
+        </thead>
+        <tbody id="existingTbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../admin_assets/ops_api.js"></script>
+<script src="../admin_assets/ops_inventory.js"></script>
+<script>
+  const API_BASE = (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
+
+  async function loadRoutes() {
+    const list = await window.OpsApi.fetch("GET", "/ops/routes");
+    const sel = document.getElementById("routeSelect");
+    sel.innerHTML = "<option value=\"\">— Select route —</option>" +
+      (list || []).map(r => "<option value=\"" + (r.id || "").replace(/"/g, "&quot;") + "\">" + (r.from || "") + " → " + (r.to || "") + "</option>").join("");
+  }
+
+  async function loadExisting(btn) {
+    const routeId = document.getElementById("routeSelect").value.trim();
+    const dateStr = document.getElementById("fillDate").value;
+    if (!routeId || !dateStr) {
+      alert("Select a route and date first.");
+      return;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
+    try {
+      const rows = await OpsInventory.listRemote(dateStr, routeId);
+      const tbody = document.getElementById("existingTbody");
+      const section = document.getElementById("existingSection");
+      if (!rows.length) {
+        tbody.innerHTML = "<tr><td colspan=\"5\" class=\"sub\">No existing slots for this route and date.</td></tr>";
+      } else {
+        tbody.innerHTML = rows.map(t =>
+          "<tr><td>" + (t.start || "") + " – " + (t.end || "") + "</td><td>" + (t.seats_available || 0) + "</td><td>$" + (t.price_usd || t.override_price_usd || 0) + "</td><td>" + (t.flight_no || "") + "</td><td>" + (t.cabin || "") + "</td></tr>"
+        ).join("");
+      }
+      section.style.display = "block";
+    } catch (e) {
+      alert(e.message || "Failed to load");
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || "Load existing"; }
+    }
+  }
+
+  let slotRows = [];
+
+  function addSlotRow(start, end, priceUsd, seats, flightNo, cabin) {
+    slotRows.push({
+      start: start || "09:00",
+      end: end || "10:00",
+      price_usd: priceUsd != null ? priceUsd : 298,
+      seats_available: seats != null ? seats : 3,
+      flight_no: flightNo || "FSB",
+      cabin: cabin || "Economy"
+    });
+    renderSlotRows();
+  }
+
+  function removeSlotRow(i) {
+    slotRows.splice(i, 1);
+    renderSlotRows();
+  }
+
+  function renderSlotRows() {
+    const tbody = document.getElementById("slotsTbody");
+    tbody.innerHTML = slotRows.map((row, i) => {
+      const idEsc = String(i).replace(/"/g, "&quot;");
+      return "<tr data-i=\"" + idEsc + "\">" +
+        "<td><input type=\"text\" class=\"slot-start\" value=\"" + (row.start || "").replace(/"/g, "&quot;") + "\" placeholder=\"09:00\"/></td>" +
+        "<td><input type=\"text\" class=\"slot-end\" value=\"" + (row.end || "").replace(/"/g, "&quot;") + "\" placeholder=\"10:00\"/></td>" +
+        "<td><input type=\"number\" class=\"slot-price\" min=\"1\" value=\"" + (row.price_usd ?? 298) + "\"/></td>" +
+        "<td><input type=\"number\" class=\"slot-seats\" min=\"1\" max=\"99\" value=\"" + (row.seats_available ?? 3) + "\"/></td>" +
+        "<td><input type=\"text\" class=\"slot-flight\" value=\"" + (row.flight_no || "FSB").replace(/"/g, "&quot;") + "\"/></td>" +
+        "<td><input type=\"text\" class=\"slot-cabin\" value=\"" + (row.cabin || "Economy").replace(/"/g, "&quot;") + "\"/></td>" +
+        "<td><button type=\"button\" class=\"btn small\" onclick=\"removeSlotRow(" + i + ")\">Remove</button></td></tr>";
+    }).join("");
+  }
+
+  function collectSlotsFromTable() {
+    const tbody = document.getElementById("slotsTbody");
+    const out = [];
+    tbody.querySelectorAll("tr").forEach((tr, i) => {
+      const start = (tr.querySelector(".slot-start") || {}).value || "09:00";
+      const end = (tr.querySelector(".slot-end") || {}).value || "10:00";
+      const price = parseInt((tr.querySelector(".slot-price") || {}).value, 10) || 298;
+      const seats = parseInt((tr.querySelector(".slot-seats") || {}).value, 10) || 3;
+      const flight = (tr.querySelector(".slot-flight") || {}).value || "FSB";
+      const cabin = (tr.querySelector(".slot-cabin") || {}).value || "Economy";
+      out.push({ start, end, price_usd: price, seats_available: seats, flight_no: flight, cabin });
+    });
+    return out;
+  }
+
+  async function saveFill(btn) {
+    const routeId = document.getElementById("routeSelect").value.trim();
+    const dateStr = document.getElementById("fillDate").value;
+    if (!routeId || !dateStr) {
+      alert("Select a route and date first.");
+      return;
+    }
+    const slots = collectSlotsFromTable();
+    if (!slots.length) {
+      alert("Add at least one slot row.");
+      return;
+    }
+    if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+    const msgEl = document.getElementById("fillMsg");
+    try {
+      const res = await window.OpsApi.fetch("POST", "/ops/slots/fill", { route_id: routeId, date_str: dateStr, slots });
+      msgEl.textContent = "Created " + (res.created || 0) + " slot(s).";
+      msgEl.style.color = "";
+      if (res.created > 0) loadExisting();
+    } catch (e) {
+      msgEl.textContent = e.message || "Save failed.";
+      msgEl.style.color = "var(--danger, #c00)";
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || "Save"; }
+    }
+  }
+
+  document.getElementById("fillDate").value = new Date().toISOString().slice(0, 10);
+  addSlotRow();
+  loadRoutes();
+</script>
+</body></html>

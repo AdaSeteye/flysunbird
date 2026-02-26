@@ -1,7 +1,10 @@
 from __future__ import annotations
+import json
+import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, Request
-import json
+
+logger = logging.getLogger(__name__)
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
@@ -203,24 +206,30 @@ async def stripe_webhook(req: Request, db: Session = Depends(get_db)):
     """Handle Stripe checkout.session.completed and mark booking paid."""
     body = await req.body()
     sig = req.headers.get("stripe-signature") or ""
+    logger.info("Stripe webhook received (body_len=%s, has_sig=%s)", len(body), bool(sig))
+
     if settings.STRIPE_WEBHOOK_SECRET and settings.STRIPE_WEBHOOK_SECRET.strip():
         import stripe
         stripe.api_key = settings.STRIPE_SECRET_KEY
         try:
             event = stripe.Webhook.construct_event(body, sig, settings.STRIPE_WEBHOOK_SECRET)
         except Exception as e:
+            logger.warning("Stripe webhook signature verification failed: %s", e)
             raise HTTPException(status_code=400, detail=f"Invalid signature: {e}")
     else:
-        import json
+        logger.warning("STRIPE_WEBHOOK_SECRET not set; accepting payload without verification (not for production)")
         event = json.loads(body.decode("utf-8") or "{}")
 
     if event.get("type") == "checkout.session.completed":
         session = event.get("data", {}).get("object", {})
         booking_ref = (session.get("metadata") or {}).get("booking_ref") or session.get("client_reference_id")
         if booking_ref:
+            logger.info("Stripe checkout.session.completed for booking_ref=%s", booking_ref)
             _confirm_booking_paid_from_webhook(
                 db, booking_ref=booking_ref, provider_ref=session.get("id", ""), status="completed", details={"stripe_session": session.get("id")}, provider="stripe"
             )
+        else:
+            logger.warning("Stripe webhook: checkout.session.completed but no booking_ref in session")
     return {"ok": True}
 
 
