@@ -22,6 +22,7 @@
     <form id="loginForm">
       <label>API base URL</label>
       <input type="text" id="apiBase" placeholder="http://localhost:8000/api/v1"/>
+      <p class="sub" style="margin-top:4px;font-size:12px">Use the backend URL (e.g. http://localhost:8000/api/v1). Not the UI port (8090).</p>
       <label>Email</label>
       <input type="email" id="email" placeholder="ops@flysunbird.co.tz" required/>
       <label>Password</label>
@@ -32,22 +33,33 @@
   </div>
   <script>
     (function(){
-      const saved = localStorage.getItem("FSB_API_BASE");
-      const input = document.getElementById("apiBase");
-      if (saved) {
+      var apiBaseDefault = "http://localhost:8000/api/v1";
+      var origin = window.location.origin || "";
+      var isLocalUi = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i.test(origin);
+      var saved = localStorage.getItem("FSB_API_BASE");
+      var input = document.getElementById("apiBase");
+      // Never use 8090 for API – that's the static file server; API runs on 8000. Fix bad saved value.
+      if (saved && saved.indexOf(":8090") !== -1) {
+        saved = apiBaseDefault;
+        localStorage.setItem("FSB_API_BASE", saved);
+      }
+      if (saved && saved.indexOf(":8090") === -1) {
         input.value = saved;
+      } else if (isLocalUi) {
+        input.value = apiBaseDefault;
+      } else if (origin && (origin.startsWith("http:") || origin.startsWith("https:"))) {
+        input.value = origin + "/api/v1";
       } else {
-        var origin = window.location.origin;
-        if (origin && (origin.startsWith("http:") || origin.startsWith("https:")))
-          input.value = origin + "/api/v1";
-        else
-          input.value = "http://localhost:8000/api/v1";
+        input.value = apiBaseDefault;
       }
     })();
     document.getElementById("loginForm").addEventListener("submit", async function(e){
       e.preventDefault();
       let apiBase = (document.getElementById("apiBase").value || "").trim().replace(/\/+$/, "");
       if (apiBase && !/\/api\/v1$/i.test(apiBase)) apiBase = apiBase + "/api/v1";
+      // Static server runs on 8090; API runs on 8000. Redirect wrong port so login works.
+      if (apiBase && apiBase.indexOf(":8090") !== -1)
+        apiBase = apiBase.replace(/:8090/, ":8000");
       const email = (document.getElementById("email").value || "").trim();
       const password = document.getElementById("password").value;
       const errEl = document.getElementById("err");

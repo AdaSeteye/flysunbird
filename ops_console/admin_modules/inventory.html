@@ -25,6 +25,12 @@
       </div>
     </div>
     <div class="hr"></div>
+    <div id="bulkPriceRow" class="row" style="display:none;align-items:center;gap:10px;margin-bottom:10px">
+      <span class="sub">Bulk: set price (USD) for all slots on this date:</span>
+      <input id="bulkPriceUsd" type="number" min="1" placeholder="e.g. 298" style="width:80px"/>
+      <button class="btn small" type="button" id="bulkPriceBtn">Apply</button>
+      <span id="bulkPriceMsg" class="sub"></span>
+    </div>
     <div style="overflow:auto">
       <table class="table">
         <thead>
@@ -39,8 +45,12 @@
   </div>
 </div>
 
+<script src="../admin_assets/ops_api.js"></script>
 <script src="../admin_assets/ops_inventory.js"></script>
 <script>
+  if (window.parent === window && !localStorage.getItem("FSB_TOKEN") && !localStorage.getItem("FSB_API_BASE")) {
+    window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
+  }
   async function refreshWithFeedback(btn){
     if(btn){ btn.disabled=true; btn.textContent='Loading…'; }
     try { await render(); } finally { if(btn){ btn.disabled=false; btn.textContent=btn.dataset.label||'Refresh'; } }
@@ -117,6 +127,29 @@
     }
   }
 
+  async function removeSlotById(id) {
+    const t = (window.__API_ROWS || []).find(r => r.id === id);
+    if (!t) return;
+    const slotLabel = (t.date_str || '') + ' ' + (t.start || '') + '-' + (t.end || '') + ' (' + (t.route_id || '').slice(0, 8) + '…)';
+    if (!confirm('Remove this slot?\n\n' + slotLabel + '\n\nSlots with paid bookings cannot be removed.')) return;
+    try {
+      await OpsInventory.deleteRemote(id);
+      document.getElementById('apiMsg').textContent = 'Slot removed.';
+      document.getElementById('apiMsg').style.color = '';
+      setTimeout(function(){ document.getElementById('apiMsg').textContent = ''; }, 3000);
+      render();
+    } catch (e) {
+      let msg = e.message || String(e);
+      try {
+        const j = JSON.parse(msg);
+        if (j.detail) msg = j.detail;
+      } catch (_) {}
+      document.getElementById('apiMsg').textContent = msg;
+      document.getElementById('apiMsg').style.color = 'var(--danger, #f87171)';
+      setTimeout(function(){ document.getElementById('apiMsg').textContent = ''; document.getElementById('apiMsg').style.color = ''; }, 6000);
+    }
+  }
+
   async function render() {
     const dateStr = document.getElementById('apiDate').value || new Date().toISOString().slice(0,10);
     const tbody = document.getElementById('apiTbody');
@@ -124,8 +157,12 @@
       const rows = await OpsInventory.listRemote(dateStr);
       if (!rows.length) {
         tbody.innerHTML = '<tr><td colspan="6" class="sub">No slots for this date. Use <strong>Fill slots (daily)</strong> in the sidebar to add slots for a day.</td></tr>';
+        var bulkRow = document.getElementById('bulkPriceRow');
+        if (bulkRow) bulkRow.style.display = 'none';
       } else {
         window.__API_ROWS = rows;
+        var bulkRow = document.getElementById('bulkPriceRow');
+        if (bulkRow) bulkRow.style.display = 'flex';
         tbody.innerHTML = rows.map(t => {
           const p = effectivePriceUsd(t);
           const overrideNote = (t.override_price_usd && t.override_price_usd > 0) ? ' <span class="sub">(override)</span>' : '';
@@ -136,17 +173,63 @@
             <td>${(t.start||'')} - ${(t.end||'')}</td>
             <td><span class="pill">${Number(t.seats_available||0)}</span></td>
             <td>$${p}${overrideNote}</td>
-            <td><button class="btn small" onclick="editPriceApiById('${idEsc}')">Edit price</button> <button class="btn small" onclick="editSeatsApiById('${idEsc}')">Edit seats</button></td>
+            <td><button class="btn small" onclick="editPriceApiById('${idEsc}')">Edit price</button> <button class="btn small" onclick="editSeatsApiById('${idEsc}')">Edit seats</button> <button class="btn small" style="margin-left:4px;color:var(--danger, #f87171)" onclick="removeSlotById('${idEsc}')">Remove slot</button></td>
           </tr>`;
         }).join('');
       }
     } catch (e) {
       tbody.innerHTML = '<tr><td colspan="6" class="sub">Could not load. Sign in from login page.</td></tr>';
+      var bulkRow = document.getElementById('bulkPriceRow');
+      if (bulkRow) bulkRow.style.display = 'none';
     }
     document.getElementById('apiDate').value = dateStr;
   }
 
+  async function bulkApplyPrice() {
+    var rows = window.__API_ROWS || [];
+    if (!rows.length) return alert('Load slots first.');
+    var input = document.getElementById('bulkPriceUsd');
+    var price = input ? parseInt(input.value, 10) : 0;
+    if (!price || price < 1) return alert('Enter a valid price (e.g. 298).');
+    var msgEl = document.getElementById('bulkPriceMsg');
+    var btn = document.getElementById('bulkPriceBtn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Applying…'; }
+    if (msgEl) msgEl.textContent = '';
+    var done = 0, err = 0;
+    for (var i = 0; i < rows.length; i++) {
+      var t = rows[i];
+      var payload = {
+        route_id: t.route_id,
+        date_str: t.date_str,
+        start: t.start,
+        end: t.end,
+        price_usd: t.price_usd,
+        price_tzs: t.price_tzs ?? null,
+        seats_available: t.seats_available,
+        flight_no: t.flight_no || 'FSB',
+        cabin: t.cabin || 'Economy',
+        base_price_usd: t.base_price_usd ?? 0,
+        base_price_tzs: t.base_price_tzs ?? null,
+        override_price_usd: price,
+        override_price_tzs: null
+      };
+      try {
+        await OpsInventory.patchRemote(t.id, payload);
+        done++;
+      } catch (e) { err++; }
+    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Apply'; }
+    if (msgEl) msgEl.textContent = done + ' updated.' + (err ? ' ' + err + ' failed.' : '');
+    if (done) {
+      document.getElementById('apiMsg').textContent = 'Bulk price set to $' + price + ' USD for ' + done + ' slot(s).';
+      setTimeout(function(){ document.getElementById('apiMsg').textContent = ''; }, 4000);
+      render();
+    }
+  }
+
   document.getElementById('apiDate').value = new Date().toISOString().slice(0,10);
+  var bulkBtn = document.getElementById('bulkPriceBtn');
+  if (bulkBtn) bulkBtn.addEventListener('click', bulkApplyPrice);
   render();
 </script>
 </body></html>

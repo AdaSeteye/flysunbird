@@ -14,3 +14,9 @@ class StripeCreateCheckoutSessionRequest(BaseModel):
     currency: str = "USD"
     successUrl: Optional[str] = None  # If omitted, backend uses CLIENT_BASE_URL + /fly/confirmation.html?ref=...
     cancelUrl: Optional[str] = None   # If omitted, backend uses CLIENT_BASE_URL + /fly/payment.html?bookingRef=...
+
+
+class SelcomCreateOrderRequest(BaseModel):
+    bookingRef: str
+    successUrl: Optional[str] = None
+    cancelUrl: Optional[str] = None

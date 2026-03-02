@@ -34,6 +34,11 @@
 
   <script src="../admin_assets/ops_api.js"></script>
   <script>
+    if (window.parent === window && !localStorage.getItem("FSB_TOKEN") && !localStorage.getItem("FSB_API_BASE")) {
+      window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
+    }
+    const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
+    const escAttr = window.FSB_escAttr || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/'/g,"&#39;").replace(/</g,"&lt;").replace(/>/g,"&gt;")));
     async function loadFxRate() {
       try {
         const data = await OpsApi.fetch("GET", "/ops/settings/fx-rate");
@@ -46,13 +51,15 @@
     async function save() {
       const tzs = parseInt(document.getElementById("tzs").value, 10);
       if (!tzs || tzs < 1) return alert("Enter a valid TZS per USD (e.g. 2450).");
+      var btn = document.querySelector('#tzs').closest('.card').querySelector('button.btn.primary');
+      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
       try {
         const data = await OpsApi.fetch("POST", "/ops/settings/fx-rate?usdToTzs=" + tzs);
         document.getElementById("msg").textContent = "Saved: " + data.usdToTzs + " TZS per USD";
         setTimeout(() => { document.getElementById("msg").textContent = ""; }, 3000);
       } catch (e) {
         alert(e.message || "Failed to save");
-      }
+      } finally { if (btn) { btn.disabled = false; btn.textContent = "Save"; } }
     }
 
     async function loadSlotRules() {
@@ -64,22 +71,23 @@
           return;
         }
         el.innerHTML = rules.map(r => {
-          const idEsc = (r.id||'').replace(/"/g,'&quot;');
+          const idEsc = escAttr(r.id||'');
+          const routeEsc = esc(r.route_id||r.id||'');
           const timesVal = (r.times||'09:00,11:00,13:00,16:00').replace(/"/g,'&quot;');
           return `
           <div class="row" style="align-items:center;margin-bottom:12px;gap:16px;flex-wrap:wrap">
-            <span><b>${(r.route_id||r.id||'').replace(/</g,'&lt;')}</b></span>
+            <span><b>${routeEsc}</b></span>
             <span><label class="sub">Price (USD)</label> <input type="number" id="price_${idEsc}" value="${r.price_usd ?? 298}" min="1" style="width:70px"/></span>
             <span><label class="sub">Seats</label> <input type="number" id="capacity_${idEsc}" value="${r.capacity ?? 3}" min="1" style="width:50px"/></span>
             <span><label class="sub">Times (comma-separated)</label> <input type="text" id="times_${idEsc}" value="${timesVal}" placeholder="09:00,11:00,13:00,16:00" style="width:180px"/></span>
-            <button class="btn small" onclick="saveSlotRule('${idEsc}')">Save</button>
+            <button class="btn small" onclick="saveSlotRule('${idEsc}', event)">Save</button>
           </div>
         `}).join("");
       } catch (e) {
         el.innerHTML = '<div class="sub">Could not load slot rules. Sign in if needed.</div>';
       }
     }
-    async function saveSlotRule(id) {
+    async function saveSlotRule(id, ev) {
       const rules = await OpsApi.fetch("GET", "/ops/slot-rules");
       const r = rules.find(x => x.id === id);
       if (!r) return;
@@ -101,13 +109,15 @@
         active: r.active !== false,
         horizon_days: r.horizon_days ?? 90
       };
+      var btn = ev && ev.target && ev.target.tagName === "BUTTON" ? ev.target : null;
+      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
       try {
         await OpsApi.fetch("PATCH", "/ops/slot-rules/" + id, payload);
         document.getElementById("msg").textContent = "Slot rule saved.";
         setTimeout(() => { document.getElementById("msg").textContent = ""; }, 3000);
       } catch (e) {
         alert(e.message || "Failed to save");
-      }
+      } finally { if (btn) { btn.disabled = false; btn.textContent = "Save"; } }
     }
 
     async function init() {

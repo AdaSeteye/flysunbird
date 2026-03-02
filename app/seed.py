@@ -10,8 +10,6 @@ from app.core.security import hash_password
 from app.models.user import User
 from app.models.route import Route
 from app.models.slot_rule import SlotRule
-from app.models.time_entry import TimeEntry
-from app.models.booking import Booking
 from app.models.setting import Setting
 
 
@@ -93,13 +91,7 @@ def run(db=None):
         tzs_rate = 2450
         # Remove ALL slot rules so only 5H-FSA schedule remains (no legacy 30-min “all days” or other routes)
         db.query(SlotRule).delete(synchronize_session=False)
-        # Remove all time entries that have no booking, so next generate_slots creates only 5H-FSA slots
-        booked_te_ids = {r[0] for r in db.query(Booking.time_entry_id).filter(Booking.time_entry_id.isnot(None)).distinct().all()}
-        if booked_te_ids:
-            db.query(TimeEntry).filter(~TimeEntry.id.in_(booked_te_ids)).delete(synchronize_session=False)
-        else:
-            db.query(TimeEntry).delete(synchronize_session=False)
-        db.flush()
+        # Slots (time entries) are created only by Ops via Fill slots (daily). We do not delete them in seed so Ops-created slots persist across restarts.
         for leg in DEFAULT_PLAN_5H_FSA_LEGS:
             from_label = _resolve_label(leg["from_code"])
             to_label = _resolve_label(leg["to_code"])

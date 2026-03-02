@@ -23,7 +23,7 @@ from app.services.audit_service import log_audit
 from app.services.email_service import queue_email
 from app.services.ticket_service import render_ticket_pdf_bytes, store_ticket_pdf
 from app.services.settings_service import get_usd_to_tzs_rate
-from app.schemas.payments import RefundRequest, StripeCreateCheckoutSessionRequest
+from app.schemas.payments import RefundRequest, StripeCreateCheckoutSessionRequest, SelcomCreateOrderRequest
 
 router = APIRouter(tags=["payments"])
 
@@ -120,6 +120,142 @@ def _generate_ticket_for_booking(db: Session, b: Booking) -> None:
     b.ticket_status = "generated"
     db.commit()
     return
+
+
+# ---------- Selcom Checkout (redirect to Selcom payment page) ----------
+@router.post("/public/payments/selcom/create-order")
+def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get_db)):
+    """Create a Selcom checkout order; returns URL to redirect the customer to pay (mobile money / card)."""
+    try:
+        b = db.query(Booking).filter(Booking.booking_ref == req.bookingRef).first()
+        if not b:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        _ensure_hold_valid(b)
+        if b.payment_status == "paid":
+            return {"ok": True, "bookingRef": b.booking_ref, "paymentStatus": "paid", "url": None}
+
+        amount_usd = _booking_amount_usd(db, b)
+        rate = get_usd_to_tzs_rate(db)
+        amount_tzs = int(amount_usd * rate) if rate else int(amount_usd * 2450)
+        first_passenger = db.query(Passenger).filter(Passenger.booking_id == b.id).order_by(Passenger.created_at.asc()).first()
+        buyer_name = ""
+        buyer_phone = ""
+        if first_passenger:
+            buyer_name = f"{(first_passenger.first or '').strip()} {(first_passenger.last or '').strip()}".strip()
+            buyer_phone = (first_passenger.phone or "").strip().replace(" ", "")
+        buyer_email = (getattr(b, "contact_email", None) or "").strip()
+        if not buyer_email and b.user_id:
+            booker = db.get(User, b.user_id)
+            if booker:
+                buyer_email = (getattr(booker, "email", None) or "").strip()
+        if not buyer_name:
+            buyer_name = "Customer"
+
+        from app.services.selcom_service import create_checkout_order
+
+        resp = create_checkout_order(
+            order_id=b.booking_ref,
+            amount=amount_tzs,
+            buyer_name=buyer_name,
+            buyer_email=buyer_email or "customer@flysunbird.co.tz",
+            buyer_phone=buyer_phone or "255000000000",
+            currency="TZS",
+        )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.exception("Selcom create order failed: %s", e)
+        log_audit(db, actor_user_id="public", action="payment_failed", entity_type="booking", entity_id=getattr(req, "bookingRef", ""), details={"selcom_error": str(e)})
+        raise HTTPException(status_code=502, detail=str(e))
+
+    # Selcom response: structure may vary; try common keys for payment/redirect URL
+    logger.info("Selcom create-order response: %s", resp)
+    url = None
+    if isinstance(resp, dict):
+        for key in ("url", "link", "payment_url", "redirect_url", "checkout_url"):
+            if resp.get(key) and isinstance(resp.get(key), str):
+                url = resp.get(key)
+                break
+        if not url:
+            data = resp.get("data")
+            if isinstance(data, list) and len(data) > 0:
+                first = data[0]
+                if isinstance(first, str) and first.startswith("http"):
+                    url = first
+                elif isinstance(first, dict):
+                    for key in ("link", "url", "payment_url", "redirect_url"):
+                        if first.get(key) and isinstance(first.get(key), str):
+                            url = first.get(key)
+                            break
+            elif isinstance(data, dict):
+                for key in ("link", "url", "payment_url", "redirect_url"):
+                    if data.get(key) and isinstance(data.get(key), str):
+                        url = data.get(key)
+                        break
+            if not url and isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict):
+                        for key in ("link", "url", "payment_url", "redirect_url"):
+                            if item.get(key) and isinstance(item.get(key), str):
+                                url = item.get(key)
+                                break
+                    if url:
+                        break
+    if not url:
+        msg = (resp.get("message") if isinstance(resp, dict) else None) or (resp.get("result") if isinstance(resp, dict) else None)
+        detail = "Selcom did not return a payment URL."
+        if msg:
+            detail += f" Selcom: {msg}"
+        logger.warning("Selcom response missing payment URL: %s", resp)
+        raise HTTPException(status_code=502, detail=detail)
+
+    try:
+        p = Payment(
+            id=str(uuid.uuid4()),
+            booking_id=b.id,
+            provider="selcom",
+            amount_usd=amount_usd,
+            amount_tzs=amount_tzs,
+            currency="TZS",
+            status="pending",
+            provider_ref=b.booking_ref,
+        )
+        db.add(p)
+        db.commit()
+    except Exception as e:
+        logger.exception("Selcom payment record save failed: %s", e)
+        raise HTTPException(status_code=502, detail="Payment record failed")
+
+    return {"ok": True, "url": url, "bookingRef": b.booking_ref}
+
+
+@router.post("/webhooks/selcom")
+async def selcom_webhook(req: Request, db: Session = Depends(get_db)):
+    """Handle Selcom payment callback. On SUCCESS/COMPLETED mark booking paid."""
+    body = await req.body()
+    try:
+        payload = json.loads(body.decode("utf-8") or "{}")
+    except Exception:
+        payload = {}
+    order_id = payload.get("order_id") or payload.get("transid")
+    result = (payload.get("result") or "").upper()
+    resultcode = payload.get("resultcode") or payload.get("resulcode", "")
+    payment_status = (payload.get("payment_status") or "").upper()
+    reference = payload.get("reference") or ""
+    transid = payload.get("transid") or order_id
+    logger.info("Selcom webhook: order_id=%s result=%s payment_status=%s", order_id, result, payment_status)
+
+    if not order_id:
+        logger.warning("Selcom webhook: missing order_id")
+        return {"ok": True}
+    booking_ref = order_id
+    if result == "SUCCESS" and (payment_status == "COMPLETED" or resultcode == "000"):
+        _confirm_booking_paid_from_webhook(
+            db, booking_ref=booking_ref, provider_ref=transid or reference, status=payment_status or result, details=payload, provider="selcom"
+        )
+    return {"ok": True}
 
 
 # ---------- Stripe Checkout (redirect) ----------

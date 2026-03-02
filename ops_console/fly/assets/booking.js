@@ -5,7 +5,7 @@ let TZS_RATE = 2450;
 const MAX_DAYS = 60;
 
 async function loadTzsRate() {
-  const base = (window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE") || (window.location.origin + "/api/v1")).replace(/\/$/, "");
+  const base = _bookingApiBase ? _bookingApiBase() : (window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE") || (window.location.origin + "/api/v1")).replace(/\/$/, "");
   if (!base) return;
   try {
     const res = await fetch(base + "/public/fx-rate");
@@ -107,8 +107,15 @@ function diffMins(start,end){
 /* ===== State ===== */
 const state = initState();
 
-// API base: explicit config, or same-origin /api/v1 when UI is served with the backend (deployed)
-const API_BASE = (window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE") || (window.location.origin + "/api/v1")).replace(/\/$/, "");
+// API base: explicit config, or same-origin /api/v1. When UI is on 8090 (static server), backend is on 8000.
+function _bookingApiBase() {
+  var o = window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE");
+  if (o) return o.replace(/\/$/, "");
+  var origin = window.location.origin || "";
+  if (origin.indexOf(":8090") !== -1) return "http://localhost:8000/api/v1";
+  return (origin ? origin + "/api/v1" : "").replace(/\/$/, "");
+}
+const API_BASE = _bookingApiBase();
 let calendarAvailability = {}; // dateStr -> { minPriceUSD } from GET /public/calendar-availability
 
 function fetchCalendarAvailability(){
@@ -297,14 +304,20 @@ function monthBlock(container, monthDate){
       </div>
       <i class="color" style="background:${color}"></i>
     `;
-    if (noSlots) cell.title = "No available slots for this date";
-    cell.addEventListener("click", ()=>{
-      state.date = dateStr;
-      $$(".d").forEach(x=>x.classList.remove("sel"));
-      cell.classList.add("sel");
-      saveState(state);
-      goToResults();
-    });
+    if (noSlots) {
+      cell.title = "No available slots for this date";
+    }
+    if (!hasSlots) {
+      cell.classList.add("inactive");
+    } else {
+      cell.addEventListener("click", ()=>{
+        state.date = dateStr;
+        $$(".d").forEach(x=>x.classList.remove("sel"));
+        cell.classList.add("sel");
+        saveState(state);
+        goToResults();
+      });
+    }
     body.appendChild(cell);
   });
 }

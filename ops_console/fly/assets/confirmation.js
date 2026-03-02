@@ -8,7 +8,14 @@
 
 const state = initState();
 const $ = (s) => document.querySelector(s);
-const API_BASE = (window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE") || (window.location.origin + "/api/v1")).replace(/\/$/, "");
+function _confirmationApiBase() {
+  var o = window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE");
+  if (o) return o.replace(/\/$/, "");
+  var origin = window.location.origin || "";
+  if (origin.indexOf(":8090") !== -1) return "http://localhost:8000/api/v1";
+  return (origin ? origin + "/api/v1" : "").replace(/\/$/, "");
+}
+const API_BASE = _confirmationApiBase();
 
 // Backend/admin can override any display field without changing markup.
 const override = window.FSB_CONFIRM_OVERRIDE || null;

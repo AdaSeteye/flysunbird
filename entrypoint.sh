@@ -32,6 +32,29 @@ finally:
 "
 
 # Slots are filled day-by-day by Ops via admin (Fill slots). No automatic generation.
+# Optional: set CLEAN_UNUSED_SLOTS_ON_START=1 to delete all slots that have no bookings (e.g. to clear leftover slots from before). Unset after one run.
+
+if [ -n "$CLEAN_UNUSED_SLOTS_ON_START" ] && [ "$CLEAN_UNUSED_SLOTS_ON_START" = "1" ]; then
+  echo "[entrypoint] Cleaning unused slots (no bookings)..."
+  python -c "
+from app.core.config import settings
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+engine = create_engine(settings.DATABASE_URL, pool_pre_ping=True)
+Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+db = Session()
+try:
+    r = db.execute(text(\"DELETE FROM time_entries WHERE id NOT IN (SELECT time_entry_id FROM bookings WHERE time_entry_id IS NOT NULL)\"))
+    db.commit()
+    print('[entrypoint] Cleaned', r.rowcount, 'unused slot(s)')
+except Exception as e:
+    db.rollback()
+    print('[entrypoint] Clean unused slots warning:', e)
+finally:
+    db.close()
+    engine.dispose()
+"
+fi
 
 # Remove legacy unused slots on specific dates only (Sat Feb 28, Mon Mar 9, Mon Mar 16, Mon Mar 30, Mon Apr 6)
 echo "[entrypoint] Removing legacy unused slots on known dates..."

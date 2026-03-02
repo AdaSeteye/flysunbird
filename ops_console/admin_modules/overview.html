@@ -28,10 +28,14 @@
     <div class="card" id="kpis"></div>
 
     <div class="card" id="chartSection" style="display:none">
-      <div style="font-weight:900;margin-bottom:8px">Bookings by day</div>
+      <div style="font-weight:900;margin-bottom:8px">Bookings by day (last 14 days)</div>
       <div class="chart-bars" id="chartBookings"></div>
       <div style="font-weight:900;margin:16px 0 8px">Revenue by day (USD)</div>
       <div class="chart-bars" id="chartRevenue"></div>
+    </div>
+
+    <div class="card" id="overviewHintCard" style="display:none">
+      <div class="sub">No slots today? <button type="button" class="btn small primary" id="overviewGoFillSlots">Go to Fill slots</button> to add slots for today.</div>
     </div>
 
     <div class="card">
@@ -51,28 +55,23 @@
     </div>
   </div>
 
+  <script src="../admin_assets/ops_api.js"></script>
   <script src="../admin_assets/ops_inventory.js"></script>
   <script src="../admin_assets/ops_bookings.js"></script>
   <script>
+    if (window.parent === window && !localStorage.getItem("FSB_TOKEN") && !localStorage.getItem("FSB_API_BASE")) {
+      window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
+    }
     const API_BASE = (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
     const hasAuth = !!(API_BASE && localStorage.getItem("FSB_TOKEN"));
+    const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
 
     async function refreshWithFeedback(btn){
       if(btn){ btn.disabled=true; btn.textContent='Loading…'; }
       try { await render(); } finally { if(btn){ btn.disabled=false; btn.textContent=btn.dataset.label||'Refresh'; } }
     }
 
-    async function refreshToken(){
-      var ref = localStorage.getItem("FSB_REFRESH_TOKEN");
-      if (!API_BASE || !ref) return false;
-      try {
-        var r = await fetch(API_BASE + "/auth/refresh?refresh_token=" + encodeURIComponent(ref), { method: "POST", headers: { "Content-Type": "application/json" } });
-        if (!r.ok) return false;
-        var d = await r.json();
-        if (d.access_token) { localStorage.setItem("FSB_TOKEN", d.access_token); if (d.refresh_token) localStorage.setItem("FSB_REFRESH_TOKEN", d.refresh_token); return true; }
-      } catch (e) {}
-      return false;
-    }
+    async function refreshToken(){ return window.FSB_refreshToken ? await window.FSB_refreshToken() : false; }
 
     function computeTodayStatsFromRules(rules) {
       var now = new Date();
@@ -91,16 +90,40 @@
       return { inventorySlots: inventorySlots, seatsAvailable: seatsAvailable };
     }
 
+    function renderCharts(metrics) {
+      var byDay = (metrics && metrics.bookings_by_day) ? metrics.bookings_by_day : [];
+      var revByDay = (metrics && metrics.revenue_by_day) ? metrics.revenue_by_day : [];
+      var maxB = Math.max(1, Math.max.apply(null, byDay.map(function(p){ return p.value || 0; })));
+      var maxR = Math.max(1, Math.max.apply(null, revByDay.map(function(p){ return p.value || 0; })));
+      var chartSection = document.getElementById('chartSection');
+      var chartBookings = document.getElementById('chartBookings');
+      var chartRevenue = document.getElementById('chartRevenue');
+      if (!chartSection || !chartBookings || !chartRevenue) return;
+      chartSection.style.display = (byDay.length || revByDay.length) ? 'block' : 'none';
+      chartBookings.innerHTML = byDay.slice(-14).map(function(p){
+        var v = p.value || 0;
+        var pct = maxB ? Math.round((v / maxB) * 100) : 0;
+        return '<div class="chart-row"><span class="chart-label">' + esc((p.date || '').slice(5)) + '</span><div class="chart-bar-wrap"><div class="chart-bar bookings" style="width:' + pct + '%"></div></div><span class="chart-value">' + v + '</span></div>';
+      }).join('') || '<div class="sub">No data</div>';
+      chartRevenue.innerHTML = revByDay.slice(-14).map(function(p){
+        var v = p.value || 0;
+        var pct = maxR ? Math.round((v / maxR) * 100) : 0;
+        return '<div class="chart-row"><span class="chart-label">' + esc((p.date || '').slice(5)) + '</span><div class="chart-bar-wrap"><div class="chart-bar revenue" style="width:' + pct + '%"></div></div><span class="chart-value">' + v + '</span></div>';
+      }).join('') || '<div class="sub">No data</div>';
+    }
+
     async function render(){
       if (hasAuth) {
         try {
           var token = localStorage.getItem("FSB_TOKEN") || "";
           var bookingsRes = await fetch(API_BASE + "/ops/bookings", { headers: { "Authorization": "Bearer " + token } });
           var statsRes = await fetch(API_BASE + "/ops/dashboard/today-stats", { headers: { "Authorization": "Bearer " + token } });
+          var metricsRes = await fetch(API_BASE + "/ops/dashboard/metrics?days=14", { headers: { "Authorization": "Bearer " + token } });
           if (bookingsRes.status === 401 && await refreshToken()) {
             token = localStorage.getItem("FSB_TOKEN");
             bookingsRes = await fetch(API_BASE + "/ops/bookings", { headers: { "Authorization": "Bearer " + token } });
             statsRes = await fetch(API_BASE + "/ops/dashboard/today-stats", { headers: { "Authorization": "Bearer " + token } });
+            metricsRes = await fetch(API_BASE + "/ops/dashboard/metrics?days=14", { headers: { "Authorization": "Bearer " + token } });
           }
           var list = bookingsRes.ok ? await bookingsRes.json() : [];
           var stats = statsRes.ok ? await statsRes.json() : null;
@@ -111,21 +134,38 @@
           }
           if (!stats) stats = { inventorySlots: 0, seatsAvailable: 0 };
           var pending = list.filter(function(b){ return (b.paymentStatus || "").toLowerCase() !== "paid"; }).length;
+          var slotsToday = stats.inventorySlots != null ? stats.inventorySlots : 0;
           document.getElementById('kpis').innerHTML =
             '<div class="grid">' +
-            '<div class="card" style="margin:0"><div class="sub">Inventory slots (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + (stats.inventorySlots || 0) + '</div></div>' +
-            '<div class="card" style="margin:0"><div class="sub">Seats available (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + (stats.seatsAvailable || 0) + '</div></div>' +
-            '<div class="card" style="margin:0"><div class="sub">Bookings</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + list.length + '</div></div>' +
-            '<div class="card" style="margin:0"><div class="sub">Pending payment</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + pending + '</div></div>' +
+            '<div class="card" style="margin:0"><div class="sub">Inventory slots (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(slotsToday) + '</div></div>' +
+            '<div class="card" style="margin:0"><div class="sub">Seats available (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(stats.seatsAvailable != null ? stats.seatsAvailable : 0) + '</div></div>' +
+            '<div class="card" style="margin:0"><div class="sub">Bookings</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(list.length) + '</div></div>' +
+            '<div class="card" style="margin:0"><div class="sub">Pending payment</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(pending) + '</div></div>' +
             '</div>';
+          var metrics = metricsRes.ok ? await metricsRes.json() : null;
+          renderCharts(metrics);
+          var hintCard = document.getElementById('overviewHintCard');
+          if (hintCard) {
+            hintCard.style.display = slotsToday === 0 ? 'block' : 'none';
+          }
           return;
         } catch (e) {
-          document.getElementById('kpis').innerHTML = '<div class="sub">Error loading: ' + (e.message || String(e)) + '</div>';
+          document.getElementById('kpis').innerHTML = '<div class="sub">Error loading: ' + esc(e.message || String(e)) + '</div>';
           return;
         }
       }
       document.getElementById('kpis').innerHTML = '<div class="sub">Sign in to view overview.</div>';
+      document.getElementById('chartSection').style.display = 'none';
+      var h = document.getElementById('overviewHintCard');
+      if (h) h.style.display = 'none';
     }
     render();
+    var goFillSlots = document.getElementById('overviewGoFillSlots');
+    if (goFillSlots) goFillSlots.addEventListener('click', function(){
+      try {
+        var parentNav = window.parent && window.parent.document ? window.parent.document.querySelector('a.nav-link[onclick*="fill-slots"]') : null;
+        if (parentNav) parentNav.click();
+      } catch (e) {}
+    });
   </script>
 </body></html>

@@ -70,13 +70,21 @@
 <script src="../admin_assets/ops_api.js"></script>
 <script src="../admin_assets/ops_inventory.js"></script>
 <script>
+  if (window.parent === window && !localStorage.getItem("FSB_TOKEN") && !localStorage.getItem("FSB_API_BASE")) {
+    window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
+  }
   const API_BASE = (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
 
   async function loadRoutes() {
-    const list = await window.OpsApi.fetch("GET", "/ops/routes");
     const sel = document.getElementById("routeSelect");
-    sel.innerHTML = "<option value=\"\">— Select route —</option>" +
-      (list || []).map(r => "<option value=\"" + (r.id || "").replace(/"/g, "&quot;") + "\">" + (r.from || "") + " → " + (r.to || "") + "</option>").join("");
+    try {
+      const list = await window.OpsApi.fetch("GET", "/ops/routes");
+      const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
+      sel.innerHTML = "<option value=\"\">— Select route —</option>" +
+        (list || []).map(r => "<option value=\"" + (r.id || "").replace(/"/g, "&quot;") + "\">" + esc(r.from || "") + " → " + esc(r.to || "") + "</option>").join("");
+    } catch (e) {
+      sel.innerHTML = "<option value=\"\">— Sign in to load routes —</option>";
+    }
   }
 
   async function loadExisting(btn) {
@@ -94,8 +102,9 @@
       if (!rows.length) {
         tbody.innerHTML = "<tr><td colspan=\"5\" class=\"sub\">No existing slots for this route and date.</td></tr>";
       } else {
+        const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
         tbody.innerHTML = rows.map(t =>
-          "<tr><td>" + (t.start || "") + " – " + (t.end || "") + "</td><td>" + (t.seats_available || 0) + "</td><td>$" + (t.price_usd || t.override_price_usd || 0) + "</td><td>" + (t.flight_no || "") + "</td><td>" + (t.cabin || "") + "</td></tr>"
+          "<tr><td>" + esc(t.start || "") + " – " + esc(t.end || "") + "</td><td>" + esc(t.seats_available ?? 0) + "</td><td>$" + esc(t.price_usd ?? t.override_price_usd ?? 0) + "</td><td>" + esc(t.flight_no || "") + "</td><td>" + esc(t.cabin || "") + "</td></tr>"
         ).join("");
       }
       section.style.display = "block";
@@ -184,6 +193,6 @@
 
   document.getElementById("fillDate").value = new Date().toISOString().slice(0, 10);
   addSlotRow();
-  loadRoutes();
+  loadRoutes().catch(function() {});
 </script>
 </body></html>

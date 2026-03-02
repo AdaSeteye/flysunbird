@@ -2,7 +2,14 @@ const state = initState();
 const $ = (s)=>document.querySelector(s);
 const $$ = (s)=>Array.from(document.querySelectorAll(s));
 
-const API_BASE = (window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE") || (window.location.origin ? window.location.origin + "/api/v1" : "")).replace(/\/$/,"");
+function _passengerApiBase() {
+  var o = window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE");
+  if (o) return o.replace(/\/$/, "");
+  var origin = window.location.origin || "";
+  if (origin.indexOf(":8090") !== -1) return "http://localhost:8000/api/v1";
+  return (origin ? origin + "/api/v1" : "").replace(/\/$/, "");
+}
+const API_BASE = _passengerApiBase();
 async function apiPost(path, body){
   const res = await fetch(API_BASE + path, {method:"POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify(body||{})});
   let data=null; try{ data = await res.json(); }catch(_e){}

@@ -45,6 +45,10 @@ body.admin{
 .nav a:hover{background:rgba(255,255,255,0.07);transform:translateY(-1px)}
 .nav a.active{background:rgba(56,189,248,0.16);border-color:rgba(56,189,248,0.32)}
 .nav .sep{height:1px;background:var(--border);margin:6px 10px}
+.nav-details{display:flex;flex-direction:column;gap:2px}
+.nav-details summary.nav-link{list-style:none;cursor:pointer}
+.nav-details summary.nav-link::-webkit-details-marker{display:none}
+.nav-details .nav-link.sub{padding-left:28px;font-size:13px}
 .tiny{font-size:12px;color:var(--muted);line-height:1.35}
 .sb-foot{margin-top:auto;padding:14px 16px;border-top:1px solid var(--border)}
 .main{display:flex;flex-direction:column}

@@ -46,5 +46,11 @@ class Settings(BaseSettings):
     STRIPE_PUBLISHABLE_KEY: str = ""
     STRIPE_WEBHOOK_SECRET: str = ""  # For webhook signature verification (e.g. whsec_...)
 
+    # Selcom (Tanzania: mobile money, cards). Vendor = Till Number from Selcom.
+    SELCOM_BASE_URL: str = "https://apigw.selcommobile.com/v1"
+    SELCOM_API_KEY: str = ""
+    SELCOM_API_SECRET: str = ""
+    SELCOM_VENDOR: str = ""    # Vendor / Till Number
+
 
 settings = Settings()

@@ -391,6 +391,8 @@ header{
 }
 .d:hover{border-color: rgba(171,24,60,.20); box-shadow: 0 10px 20px rgba(2,6,23,.06)}
 .d.disabled{opacity:.45; cursor:not-allowed; background:#fafafa; box-shadow:none}
+.d.no-slots.inactive,.d.inactive{pointer-events:none; cursor:default; opacity:.7}
+.d.no-slots.inactive:hover,.d.inactive:hover{filter:none; box-shadow:none}
 .d.sel{outline: 2px solid var(--brand); outline-offset:-2px}
 .d .dw{font-size:.72rem; color: var(--muted); line-height:1; text-align:center}
 .d .p{font-size: .95rem; font-weight:600; line-height:1; text-align:center}

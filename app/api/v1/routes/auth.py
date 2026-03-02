@@ -2,7 +2,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.db.session import get_db
-from app.schemas.auth import LoginRequest, TokenPair
+from app.schemas.auth import LoginRequest, TokenPair, RefreshRequest
 from app.models.user import User
 from app.core.security import verify_password, create_access_token, create_refresh_token
 from app.api.deps import get_current_user
@@ -23,10 +23,11 @@ def login(body: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/auth/refresh", response_model=TokenPair)
-def refresh(refresh_token: str, db: Session = Depends(get_db)):
+def refresh(body: RefreshRequest, db: Session = Depends(get_db)):
+    """Accept refresh_token in POST body to avoid leaking it in URL/logs."""
     from app.core.security import decode_token
     try:
-        payload = decode_token(refresh_token)
+        payload = decode_token(body.refresh_token)
     except Exception:
         raise HTTPException(status_code=401, detail="Invalid refresh token")
     user_id = payload.get("sub")

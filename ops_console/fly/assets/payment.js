@@ -16,8 +16,14 @@ async function loadTzsRate() {
 // Optional: configure your backend API base via:
 // 1) localStorage.setItem("FLYSUNBIRD_API_BASE","https://api.flysunbird.co.tz")
 // 2) window.FLYSUNBIRD_API_BASE = "https://api.flysunbird.co.tz"
-const API_BASE =
-  (window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE") || (window.location.origin ? window.location.origin + "/api/v1" : "")).replace(/\/$/, "");
+function _paymentApiBase() {
+  var o = window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE");
+  if (o) return o.replace(/\/$/, "");
+  var origin = window.location.origin || "";
+  if (origin.indexOf(":8090") !== -1) return "http://localhost:8000/api/v1";
+  return (origin ? origin + "/api/v1" : "").replace(/\/$/, "");
+}
+const API_BASE = _paymentApiBase();
 
 const qp = new URLSearchParams(typeof location !== "undefined" && location.search || "");
 const urlRef = qp.get("bookingRef") || qp.get("ref");
@@ -99,7 +105,7 @@ function renderSummary(){
       <div class="line"><div class="k">Phone</div><div class="v">${p0.phone || "—"}</div></div>
       <div class="div"></div>
       <div class="total"><div class="k">Total</div><div class="v">${fmt(total, state.currency)}</div></div>
-      <div class="hint">Pay with Stripe (redirect) or use Selcom for local/demo.</div>
+      <div class="hint">Pay with Stripe (card) or Selcom (mobile money / card in Tanzania).</div>
     </div>
   `;
 }
@@ -196,13 +202,38 @@ $("#payNow").addEventListener("click", async ()=>{
     return;
   }
 
-  // Selcom: UI-only / demo (no backend charge).
+  // Selcom: create order and redirect to Selcom payment page (mobile money / card).
   if(method === "selcom"){
-    state.paymentStatus = "paid";
-    state.paidAt = new Date().toISOString();
-    state.paymentProvider = "selcom";
-    saveState(state);
-    window.location.href = "confirmation.html?ref=" + encodeURIComponent(state.bookingRef || "");
+    try {
+      $("#payNow").disabled = true;
+      $("#payNow").textContent = "Redirecting to Selcom…";
+      if(!API_BASE){
+        alert("API base not configured. Set FLYSUNBIRD_API_BASE.");
+        return;
+      }
+      const res = await fetch(API_BASE + "/public/payments/selcom/create-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ bookingRef: state.bookingRef || "" })
+      });
+      const data = await res.json().catch(() => ({}));
+      if(!res.ok){
+        const msg = (data.error != null ? data.error : data.detail != null ? data.detail : data.message != null ? data.message : "Selcom payment could not be started");
+        throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+      }
+      if(data.paymentStatus === "paid" || !data.url){
+        window.location.href = "confirmation.html?ref=" + encodeURIComponent(state.bookingRef || "");
+        return;
+      }
+      window.location.href = data.url;
+      return;
+    } catch(e){
+      console.error(e);
+      alert(e && e.message ? e.message : "Could not start Selcom payment.");
+    } finally {
+      $("#payNow").disabled = false;
+      $("#payNow").textContent = "Pay now";
+    }
     return;
   }
 });

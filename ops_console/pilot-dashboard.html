@@ -45,11 +45,16 @@
     const getApiBase = () => (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
     const getToken = () => localStorage.getItem("FSB_TOKEN") || "";
 
+    function clearSessionAndRedirect() {
+      localStorage.removeItem("FSB_TOKEN");
+      localStorage.removeItem("FSB_REFRESH_TOKEN");
+      window.location.replace("login.html");
+    }
     async function refreshAccessToken() {
       const base = getApiBase(), ref = localStorage.getItem("FSB_REFRESH_TOKEN");
       if (!base || !ref) return false;
       try {
-        const r = await fetch(base + "/auth/refresh?refresh_token=" + encodeURIComponent(ref), { method: "POST", headers: { "Content-Type": "application/json" } });
+        const r = await fetch(base + "/auth/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: ref }) });
         if (!r.ok) return false;
         const data = await r.json();
         if (data.access_token) {
@@ -60,7 +65,6 @@
       } catch (e) {}
       return false;
     }
-
     async function api(method, path, body, retried) {
       const base = getApiBase(), token = getToken();
       if (!base) throw new Error("API base not set. Sign in from the login page.");
@@ -72,7 +76,7 @@
       if (res.status === 401 && !retried && await refreshAccessToken()) return api(method, path, body, true);
       if (!res.ok) {
         const text = await res.text();
-        if (res.status === 401) throw new Error("Session expired. Please sign in again.");
+        if (res.status === 401) { clearSessionAndRedirect(); throw new Error("Session expired."); }
         throw new Error(text || res.statusText);
       }
       return await res.json();

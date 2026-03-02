@@ -48,6 +48,9 @@
   <script src="../admin_assets/admin_store.js"></script>
   <script src="../admin_assets/ops_api.js"></script>
   <script>
+    if (window.parent === window && !localStorage.getItem("FSB_TOKEN") && !localStorage.getItem("FSB_API_BASE")) {
+      window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
+    }
     const ONLINE = !!(localStorage.getItem("FSB_API_BASE") || window.API_BASE);
 
     async function listLocations() {
@@ -67,25 +70,29 @@
       const name = document.getElementById('name').value.trim();
       const subs = document.getElementById('subs').value.split(',').map(s=>s.trim()).filter(Boolean);
       if (!region || !code || !name) return alert("Region/Code/Name required");
-      if (ONLINE && window.OpsApi) {
-        try {
-          await OpsApi.fetch("POST", "/ops/locations", { region, code, name, subs, active: true });
+      var btn = document.querySelector('.card button.btn.primary');
+      if (btn) { btn.disabled = true; btn.textContent = "Adding…"; }
+      try {
+        if (ONLINE && window.OpsApi) {
+          try {
+            await OpsApi.fetch("POST", "/ops/locations", { region, code, name, subs, active: true });
+            document.getElementById('region').value = "";
+            document.getElementById('code').value = "";
+            document.getElementById('name').value = "";
+            document.getElementById('subs').value = "";
+            await render();
+          } catch (e) {
+            alert(e.message || "Failed to add");
+          }
+        } else {
+          await AdminStore.addLocation({ region, code, name, subs });
           document.getElementById('region').value = "";
           document.getElementById('code').value = "";
           document.getElementById('name').value = "";
           document.getElementById('subs').value = "";
-          await render();
-        } catch (e) {
-          alert(e.message || "Failed to add");
+          render();
         }
-      } else {
-        await AdminStore.addLocation({ region, code, name, subs });
-        document.getElementById('region').value = "";
-        document.getElementById('code').value = "";
-        document.getElementById('name').value = "";
-        document.getElementById('subs').value = "";
-        render();
-      }
+      } finally { if (btn) { btn.disabled = false; btn.textContent = "Add"; } }
     }
 
     async function toggle(id) {
@@ -133,17 +140,20 @@
         const s = `${l.region || ''} ${l.code || ''} ${l.name || ''} ${subs.join(' ')}`.toLowerCase();
         return !q || s.includes(q);
       });
+      const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
+      const escAttr = window.FSB_escAttr || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/'/g,"&#39;").replace(/</g,"&lt;").replace(/>/g,"&gt;")));
       document.getElementById('tbody').innerHTML = rows.map(l => {
         const subs = Array.isArray(l.subs) ? l.subs : (typeof l.subs === 'string' ? l.subs.split(',').map(s=>s.trim()).filter(Boolean) : []);
+        const idA = escAttr(l.id || "");
         return `<tr>
-          <td>${l.region || ''}</td>
-          <td><b>${l.code || ''}</b></td>
-          <td>${l.name || ''}</td>
-          <td class="sub">${subs.join(", ")}</td>
+          <td>${esc(l.region)}</td>
+          <td><b>${esc(l.code)}</b></td>
+          <td>${esc(l.name)}</td>
+          <td class="sub">${esc(subs.join(", "))}</td>
           <td>${l.active !== false ? '<span class="badge ok">ACTIVE</span>' : '<span class="badge warn">HIDDEN</span>'}</td>
           <td class="actions">
-            <button class="btn small" onclick="toggle('${(l.id||'').replace(/'/g,"\\'")}')">${l.active !== false ? 'Hide' : 'Activate'}</button>
-            <button class="btn small danger" onclick="del('${(l.id||'').replace(/'/g,"\\'")}')">Delete</button>
+            <button class="btn small" onclick="toggle('${idA}')">${l.active !== false ? 'Hide' : 'Activate'}</button>
+            <button class="btn small danger" onclick="del('${idA}')">Delete</button>
           </td>
         </tr>`;
       }).join("") || '<tr><td colspan="6" class="sub">No locations</td></tr>';

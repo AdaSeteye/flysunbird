@@ -40,6 +40,9 @@
   <script src="../admin_assets/admin_store.js"></script>
   <script src="../admin_assets/ops_api.js"></script>
   <script>
+    if (window.parent === window && !localStorage.getItem("FSB_TOKEN") && !localStorage.getItem("FSB_API_BASE")) {
+      window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
+    }
     const ONLINE = !!(localStorage.getItem("FSB_API_BASE") || window.API_BASE);
 
     async function load() {
@@ -69,19 +72,23 @@
       const sha = document.getElementById('sha').value.trim();
       const url = document.getElementById('url').value.trim();
       if (!ver || !sha) return alert("Version + docSha256 required");
-      if (ONLINE && window.OpsApi) {
-        try {
-          await OpsApi.fetch("POST", "/ops/settings/terms", { version: ver, docSha256: sha, url: url || "fly/terms-and-conditions.html" });
-          document.getElementById('msg').textContent = "Saved to backend";
+      var btn = document.querySelector('button.btn.primary');
+      if (btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+      try {
+        if (ONLINE && window.OpsApi) {
+          try {
+            await OpsApi.fetch("POST", "/ops/settings/terms", { version: ver, docSha256: sha, url: url || "fly/terms-and-conditions.html" });
+            document.getElementById('msg').textContent = "Saved to backend";
+            setTimeout(() => { document.getElementById('msg').textContent = ""; }, 3000);
+          } catch (e) {
+            alert(e.message || "Failed to save");
+          }
+        } else {
+          AdminStore.setTerms({ version: ver, docSha256: sha, url: url || "fly/terms-and-conditions.html" });
+          document.getElementById('msg').textContent = "Saved (local only)";
           setTimeout(() => { document.getElementById('msg').textContent = ""; }, 3000);
-        } catch (e) {
-          alert(e.message || "Failed to save");
         }
-      } else {
-        AdminStore.setTerms({ version: ver, docSha256: sha, url: url || "fly/terms-and-conditions.html" });
-        document.getElementById('msg').textContent = "Saved (local only)";
-        setTimeout(() => { document.getElementById('msg').textContent = ""; }, 3000);
-      }
+      } finally { if (btn) { btn.disabled = false; btn.textContent = "Save"; } }
     }
 
     render();

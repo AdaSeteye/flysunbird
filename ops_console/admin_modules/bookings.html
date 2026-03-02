@@ -87,7 +87,7 @@
     </div>
 
     <div class="actions" style="margin-top:10px">
-      <button class="btn primary" onclick="addOffline()">Create booking + reserve seats</button>
+      <button class="btn primary" id="createBookingBtn" type="button" data-label="Create booking + reserve seats" onclick="addOffline()">Create booking + reserve seats</button>
     </div>
   </div>
 
@@ -116,12 +116,18 @@
 </div>
 
 <script src="../admin_assets/admin_store.js"></script>
+<script src="../admin_assets/ops_api.js"></script>
 <script src="../admin_assets/countries.js"></script>
 <script src="../admin_assets/ops_inventory.js"></script>
 <script src="../admin_assets/ops_bookings.js"></script>
 <script>
+  if (window.parent === window && !localStorage.getItem("FSB_TOKEN") && !localStorage.getItem("FSB_API_BASE")) {
+    window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
+  }
   const ONLINE = !!(localStorage.getItem('FSB_API_BASE') || window.API_BASE);
   const API_BASE = (localStorage.getItem('FSB_API_BASE') || window.API_BASE || '').replace(/\/$/, '');
+  const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
+  const escAttr = window.FSB_escAttr || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/'/g,"&#39;").replace(/</g,"&lt;").replace(/>/g,"&gt;")));
 
   async function refreshWithFeedback(btn){
     if(btn){ btn.disabled=true; btn.textContent='Loading…'; }
@@ -146,7 +152,7 @@
       sel.innerHTML = '<option value="">— Sign in to load origins —</option>';
       return;
     }
-    var allowedOrigins = ['Dar es Salaam Airport', 'Zanzibar Airport', 'Zanzibar Nungwi', 'Zanzibar Seacliff', 'Zanzibar Paje'];
+    var allowedOrigins = ['Dar es Salaam Airport', 'Zanzibar Airport', 'Zanzibar Nungwi', 'Zanzibar Seacliff', 'Zanzibar Paje', 'Paje'];
     var excludedOrigins = ['Zanzibar Stone Town', 'Zanzibar Kendwa Rocks'];
     try {
       const res = await fetch(API_BASE + '/public/routes');
@@ -268,13 +274,17 @@
           <i class="color" style="background:${color}"></i>
         `;
         if (noSlots) cell.title = 'No available slots';
-        cell.addEventListener('click', () => {
-          document.getElementById('date').value = dateStr;
-          document.getElementById('from').value = origin || '';
-          document.querySelectorAll('#opsCalendarBlock .d.sel').forEach(x => x.classList.remove('sel'));
-          cell.classList.add('sel');
-          hydrateInventory();
-        });
+        if (!hasSlots) {
+          cell.classList.add('inactive');
+        } else {
+          cell.addEventListener('click', () => {
+            document.getElementById('date').value = dateStr;
+            document.getElementById('from').value = origin || '';
+            document.querySelectorAll('#opsCalendarBlock .d.sel').forEach(x => x.classList.remove('sel'));
+            cell.classList.add('sel');
+            hydrateInventory();
+          });
+        }
         body.appendChild(cell);
       });
     }
@@ -311,16 +321,26 @@
     renderOpsCalendarBody();
   });
 
-  async function setStatus(id, status){
+  async function setStatus(id, status, ev){
     if(!ONLINE) return alert("Sign in to manage bookings.");
-    if(status === "CONFIRMED"){ try{ await OpsBookings.markPaidRemote(id); }catch(e){ alert(e.message||String(e)); return; } }
-    else if(status === "CANCELLED"){ const reason = prompt("Cancel reason (optional):") || "OPS cancel"; try{ await OpsBookings.cancelRemote(id, { decision_note: reason }); }catch(e){ alert(e.message||String(e)); return; } }
-    await render();
+    var btn = ev && ev.target && ev.target.tagName === "BUTTON" ? ev.target : null;
+    if(btn){ btn.disabled = true; btn.textContent = "Saving…"; }
+    try {
+      if(status === "CONFIRMED"){ try{ await OpsBookings.markPaidRemote(id); }catch(e){ alert(e.message||String(e)); return; } }
+      else if(status === "CANCELLED"){ const reason = prompt("Cancel reason (optional):") || "OPS cancel"; try{ await OpsBookings.cancelRemote(id, { decision_note: reason }); }catch(e){ alert(e.message||String(e)); return; } }
+      await render();
+      if(typeof openDetail === "function") openDetail(id);
+    } finally { if(btn){ btn.disabled = false; btn.textContent = status === "CANCELLED" ? "Cancel" : "Confirm"; } }
   }
-  async function setPay(id, paymentStatus, pilotEmail){
+  async function setPay(id, paymentStatus, pilotEmail, ev){
     if(!ONLINE) return alert("Sign in to manage bookings.");
-    if(paymentStatus === "PAID"){ try{ await OpsBookings.markPaidRemote(id, pilotEmail); }catch(e){ alert(e.message||String(e)); return; } }
-    await render();
+    var btn = ev && ev.target && ev.target.tagName === "BUTTON" ? ev.target : null;
+    if(btn){ btn.disabled = true; btn.textContent = "Saving…"; }
+    try {
+      if(paymentStatus === "PAID"){ try{ await OpsBookings.markPaidRemote(id, pilotEmail); }catch(e){ alert(e.message||String(e)); return; } }
+      await render();
+      if(typeof openDetail === "function") openDetail(id);
+    } finally { if(btn){ btn.disabled = false; btn.textContent = "Mark Paid"; } }
   }
   async function resendTicket(ref){
     const reason = prompt("Reason (optional):", "Resent from OPS") || "Resent from OPS";
@@ -455,6 +475,9 @@ function syncPax(){
 setTimeout(syncPax, 0);
 
 async function addOffline(){
+  var btn = document.getElementById("createBookingBtn");
+  if (btn) { btn.disabled = true; btn.textContent = "Creating…"; }
+  try {
   if(!ONLINE){
     alert("Sign in from the login page to create bookings.");
     return;
@@ -471,7 +494,7 @@ async function addOffline(){
       return;
     }
     let passengers=[];
-    try{ passengers = collectPassengers(); }catch(e){ return alert(e.message||String(e)); }
+    try{ passengers = collectPassengers(); }catch(e){ alert(e.message||String(e)); return; }
 
     var contactEmailEl = document.getElementById('contactEmail');
     var contactNameEl = document.getElementById('contactName');
@@ -501,7 +524,7 @@ async function addOffline(){
 
     const created = await OpsBookings.createDraftRemote(payload);
     const ref = created.bookingRef || created.booking_ref || created.ref;
-    if(!ref) return alert("Backend did not return bookingRef");
+    if(!ref){ alert("Backend did not return bookingRef"); return; }
     const linkObj = await OpsBookings.paymentLinkRemote(ref);
     const payUrl = linkObj.url || linkObj.payment_url || linkObj.paymentUrl;
 
@@ -513,7 +536,9 @@ async function addOffline(){
     }else{
       alert("Draft created.");
     }
-    return;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || "Create booking + reserve seats"; }
+  }
   }
 
   async function regenLink(id){
@@ -550,6 +575,7 @@ async function addOffline(){
     try { x = await OpsBookings.getRemote(id); } catch(e){ alert(e.message||String(e)); return; }
     if(!x) return;
     const ref = x.bookingRef||x.id;
+    const refA = escAttr(ref);
     const isPaid = (x.paymentStatus||"").toLowerCase() === "paid";
     const isCancelled = x.status === "CANCELLED";
     const routeStr = (x.from && x.to) ? (x.from + " → " + x.to) : (x.timeEntry ? (x.timeEntry.dateStr + " " + (x.timeEntry.start||"") + "-" + (x.timeEntry.end||"")) : "-");
@@ -562,20 +588,20 @@ async function addOffline(){
       <div class="hrow">
         <div>
           <div style="font-weight:900">Booking Detail</div>
-          <div class="sub">Ref: <b>${ref}</b> • Created: ${x.createdAt||"-"}</div>
+          <div class="sub">Ref: <b>${esc(ref)}</b> • Created: ${esc(x.createdAt||"-")}</div>
         </div>
         <div class="actions">
           <button class="btn" onclick="window.open('../fly/confirmation.html?ref=${encodeURIComponent(ref)}','_blank')">Open Confirmation</button>
-          ${ONLINE && isPaid && API_BASE ? `<button class="btn" onclick="window.open(API_BASE + '/public/bookings/' + encodeURIComponent('${ref.replace(/'/g,"\\'")}') + '/ticket', '_blank')">Download ticket</button>` : ""}
-          ${ONLINE && isPaid ? `<button class="btn" onclick="resendTicket('${ref.replace(/'/g,"\\'")}')">Resend ticket</button>` : ""}
+          ${ONLINE && isPaid && API_BASE ? `<button class="btn" onclick="window.open(API_BASE + '/public/bookings/' + encodeURIComponent('${refA}') + '/ticket', '_blank')">Download ticket</button>` : ""}
+          ${ONLINE && isPaid ? `<button class="btn" onclick="resendTicket('${refA}')">Resend ticket</button>` : ""}
           ${!isPaid ? `
             <div class="row" style="align-items:center;margin-right:10px">
               <label style="white-space:nowrap">Pilot email</label>
               <input id="detailPilotEmail" type="email" placeholder="pilot@flysunbird.co.tz" style="max-width:220px"/>
             </div>
-            <button class="btn primary" onclick="setPay('${ref.replace(/'/g,"\\'")}','PAID', document.getElementById('detailPilotEmail') && document.getElementById('detailPilotEmail').value.trim() || undefined); openDetail('${ref.replace(/'/g,"\\'")}');">Mark Paid</button>
+            <button class="btn primary" id="detailMarkPaidBtn" onclick="setPay('${refA}','PAID', document.getElementById('detailPilotEmail') && document.getElementById('detailPilotEmail').value.trim() || undefined, event)">Mark Paid</button>
           ` : ""}
-          ${!isCancelled ? `<button class="btn danger" onclick="if(confirm('Cancel this booking?')) setStatus('${ref.replace(/'/g,"\\'")}','CANCELLED').then(()=>openDetail('${ref.replace(/'/g,"\\'")}'));">Cancel</button>` : ""}
+          ${!isCancelled ? `<button class="btn danger" id="detailCancelBtn" onclick="if(confirm('Cancel this booking?')) setStatus('${refA}','CANCELLED', event).then(()=>openDetail('${refA}'));">Cancel</button>` : ""}
         </div>
       </div>
       <div class="hr"></div>
@@ -583,26 +609,26 @@ async function addOffline(){
       <div class="grid">
         <div class="card" style="margin:0">
           <div class="sub">Route</div>
-          <div style="font-weight:900">${routeStr}</div>
-          <div class="sub" style="margin-top:6px">Date: ${x.dateStr||x.date||"-"} • Slot: ${slotStr}</div>
+          <div style="font-weight:900">${esc(routeStr)}</div>
+          <div class="sub" style="margin-top:6px">Date: ${esc(x.dateStr||x.date||"-")} • Slot: ${esc(slotStr)}</div>
         </div>
         <div class="card" style="margin:0">
           <div class="sub">Status</div>
           <div class="actions" style="margin-top:6px">
-            <span class="badge ${isCancelled?'bad':isPaid?'ok':'warn'}">${x.status||"-"}</span>
-            <span class="badge ${isPaid?'ok':(x.paymentStatus==='failed'?'bad':'warn')}">${x.paymentStatus||"unpaid"}</span>
+            <span class="badge ${isCancelled?'bad':isPaid?'ok':'warn'}">${esc(x.status||"-")}</span>
+            <span class="badge ${isPaid?'ok':(x.paymentStatus==='failed'?'bad':'warn')}">${esc(x.paymentStatus||"unpaid")}</span>
           </div>
         </div>
         <div class="card" style="margin:0">
           <div class="sub">Contact</div>
-          <div style="font-weight:900">${contactStr}</div>
-          <div class="sub" style="margin-top:6px">${contactSub}</div>
+          <div style="font-weight:900">${esc(contactStr)}</div>
+          <div class="sub" style="margin-top:6px">${esc(contactSub)}</div>
         </div>
       </div>
 
       <div class="hr"></div>
       <div style="font-weight:900">Passengers</div>
-      <code class="k">${JSON.stringify(x.passengers||[], null, 2)}</code>
+      <code class="k">${esc(JSON.stringify(x.passengers||[], null, 2))}</code>
 
       ${ONLINE && isPaid ? `
       <div class="hr"></div>
@@ -611,14 +637,14 @@ async function addOffline(){
       <div class="row" style="margin-top:10px;align-items:center">
         <label style="white-space:nowrap">Pilot email</label>
         <input id="assignPilotEmail" type="email" placeholder="pilot@flysunbird.co.tz" style="max-width:260px"/>
-        <button class="btn" onclick="(async()=>{const e=document.getElementById('assignPilotEmail');const ref='${ref.replace(/'/g,"\\'")}';if(!e||!e.value.trim()){alert('Enter pilot email');return;}try{await OpsBookings.assignPilotRemote(ref,e.value.trim());alert('Pilot assigned.');openDetail(ref);}catch(err){alert(err.message||'Failed');})()">Assign Pilot</button>
+        <button class="btn" onclick="(async()=>{const e=document.getElementById('assignPilotEmail');const ref='${refA}';if(!e||!e.value.trim()){alert('Enter pilot email');return;}try{await OpsBookings.assignPilotRemote(ref,e.value.trim());alert('Pilot assigned.');openDetail(ref);}catch(err){alert(err.message||'Failed');})()">Assign Pilot</button>
       </div>
       ` : ""}
 
       ${(x.payments && x.payments.length) ? `
       <div class="hr"></div>
       <div style="font-weight:900">Payments</div>
-      <code class="k">${JSON.stringify(x.payments, null, 2)}</code>
+      <code class="k">${esc(JSON.stringify(x.payments, null, 2))}</code>
       ` : ""}
     `;
     el.scrollIntoView({behavior:"smooth"});
@@ -637,7 +663,7 @@ async function addOffline(){
       return;
     }
     let list = [];
-    try { list = await OpsBookings.listRemote(); } catch(e){ document.getElementById('tbody').innerHTML = `<tr><td colspan="8" class="sub">Error: ${String(e.message)}</td></tr>`; return; }
+    try { list = await OpsBookings.listRemote(); } catch(e){ document.getElementById('tbody').innerHTML = `<tr><td colspan="8" class="sub">Error: ${esc(e.message||String(e))}</td></tr>`; return; }
     const q = (document.getElementById('q').value||"").toLowerCase();
     const filtered = list.filter(b=>{
       const ref = b.bookingRef || b.id || "";
@@ -646,23 +672,26 @@ async function addOffline(){
     });
     document.getElementById('tbody').innerHTML = filtered.map(b=>{
       const ref = b.bookingRef || b.id;
+      const refA = escAttr(ref);
       const status = b.status || "";
       const pay = (b.paymentStatus||"").toLowerCase();
       const isPaid = pay === "paid";
       const isCancelled = status === "CANCELLED";
+      const routeCell = (b.from && b.to) ? (b.from + " → " + b.to) : (b.from||b.to||"-");
       return `
       <tr>
-        <td class="sub">${(b.createdAt||"").slice(0,16).replace("T"," ")}</td>
-        <td><b>${ref}</b></td>
-        <td>${(b.from && b.to) ? (b.from + " → " + b.to) : (b.from||b.to||"-")}</td>
-        <td>${b.dateStr||b.date||"-"}</td>
-        <td><span class="badge ${isCancelled?'bad':isPaid?'ok':'warn'}">${status}</span></td>
-        <td><span class="badge ${isPaid?'ok':pay==='failed'?'bad':'warn'}">${b.paymentStatus||'unpaid'}</span></td>
-        <td class="sub">${b.contactName||(b.contact&&b.contact.name)||"-"} • ${b.contactEmail||(b.contact&&b.contact.email)||"-"}</td>
+        <td class="sub">${esc((b.createdAt||"").slice(0,16).replace("T"," "))}</td>
+        <td><b>${esc(ref)}</b></td>
+        <td>${esc(routeCell)}</td>
+        <td>${esc(b.dateStr||b.date||"-")}</td>
+        <td><span class="badge ${isCancelled?'bad':isPaid?'ok':'warn'}">${esc(status)}</span></td>
+        <td><span class="badge ${isPaid?'ok':pay==='failed'?'bad':'warn'}">${esc(b.paymentStatus||'unpaid')}</span></td>
+        <td class="sub">${esc(b.contactName||(b.contact&&b.contact.name)||"-")} • ${esc(b.contactEmail||(b.contact&&b.contact.email)||"-")}</td>
         <td class="actions">
-          <button class="btn small" onclick="openDetail('${ref.replace(/'/g,"\\'")}')">Open</button>
-          ${!isPaid ? `<button class="btn small" onclick="setPay('${ref.replace(/'/g,"\\'")}','PAID')">Mark Paid</button>` : ""}
-          ${!isCancelled ? `<button class="btn small danger" onclick="setStatus('${ref.replace(/'/g,"\\'")}','CANCELLED')">Cancel</button>` : ""}
+          <button class="btn small" onclick="openDetail('${refA}')">Open</button>
+          ${!isPaid ? `<button class="btn small" onclick="copyLink('${refA}')" title="Copy payment link">Copy link</button>` : ""}
+          ${!isPaid ? `<button class="btn small" onclick="setPay('${refA}','PAID', undefined, event)">Mark Paid</button>` : ""}
+          ${!isCancelled ? `<button class="btn small danger" onclick="setStatus('${refA}','CANCELLED', event)">Cancel</button>` : ""}
         </td>
       </tr>
     `;

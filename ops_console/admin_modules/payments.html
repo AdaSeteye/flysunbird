@@ -26,27 +26,22 @@
   </div>
 </div>
 
+<script src="../admin_assets/ops_api.js"></script>
 <script src="../admin_assets/ops_bookings.js"></script>
 <script>
+  if (window.parent === window && !localStorage.getItem("FSB_TOKEN") && !localStorage.getItem("FSB_API_BASE")) {
+    window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
+  }
   const ONLINE = !!(localStorage.getItem("FSB_API_BASE") || window.API_BASE);
   const API_BASE = (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
+  const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
 
   async function refreshWithFeedback(btn){
     if(btn){ btn.disabled=true; btn.textContent='Loading…'; }
     try { await render(); } finally { if(btn){ btn.disabled=false; btn.textContent=btn.dataset.label||'Refresh'; } }
   }
 
-  async function refreshToken(){
-    var ref = localStorage.getItem("FSB_REFRESH_TOKEN");
-    if (!API_BASE || !ref) return false;
-    try {
-      var r = await fetch(API_BASE + "/auth/refresh?refresh_token=" + encodeURIComponent(ref), { method: "POST", headers: { "Content-Type": "application/json" } });
-      if (!r.ok) return false;
-      var d = await r.json();
-      if (d.access_token) { localStorage.setItem("FSB_TOKEN", d.access_token); if (d.refresh_token) localStorage.setItem("FSB_REFRESH_TOKEN", d.refresh_token); return true; }
-    } catch (e) {}
-    return false;
-  }
+  async function refreshToken(){ return window.FSB_refreshToken ? await window.FSB_refreshToken() : false; }
 
   async function fetchPayments(retried){
     if (!ONLINE || !API_BASE) return [];
@@ -60,38 +55,28 @@
   async function render(){
     const tbody = document.getElementById("tbody");
     const q = (document.getElementById("q") && document.getElementById("q").value || "").toLowerCase();
-    if (ONLINE) {
-      try {
-        let list = await fetchPayments();
-        if (q) list = list.filter(p => (p.bookingRef || "").toLowerCase().includes(q));
-        tbody.innerHTML = list.map(p => `
-          <tr>
-            <td class="sub">${(p.createdAt||"").slice(0,16).replace("T"," ")}</td>
-            <td><b>${p.bookingRef || "—"}</b></td>
-            <td>${p.provider || "—"}</td>
-            <td><span class="badge ${p.status==='paid'?'ok':p.status==='failed'?'bad':'warn'}">${p.status || "—"}</span></td>
-            <td>${p.currency || "USD"} ${Number(p.amountUSD||0).toFixed(0)}</td>
-            <td class="actions">
-              <a class="btn small" href="../fly/confirmation.html?ref=${encodeURIComponent(p.bookingRef||'')}" target="_blank">View booking</a>
-            </td>
-          </tr>
-        `).join("") || "<tr><td colspan='6' class='sub'>No payments yet</td></tr>";
-      } catch (e) {
-        tbody.innerHTML = "<tr><td colspan='6' class='sub'>Error: " + (e.message || String(e)) + "</td></tr>";
-      }
+    if (!ONLINE) {
+      tbody.innerHTML = "<tr><td colspan='6' class='sub'>Sign in to view payments.</td></tr>";
       return;
     }
-    const list = OpsBookings.load().filter(b => !q || (b.id||"").toLowerCase().includes(q));
-    tbody.innerHTML = list.map(b => `
-      <tr>
-        <td class="sub">${(b.createdAt||"").slice(0,16).replace("T"," ")}</td>
-        <td><b>${b.id}</b></td>
-        <td>—</td>
-        <td><span class="badge ${b.paymentStatus==='PAID'?'ok':b.paymentStatus==='FAILED'?'bad':'warn'}">${b.paymentStatus||"—"}</span></td>
-        <td>—</td>
-        <td class="actions"><a class="btn small" href="../fly/confirmation.html?ref=${encodeURIComponent(b.id)}" target="_blank">View</a></td>
-      </tr>
-    `).join("") || "<tr><td colspan='6' class='sub'>Sign in to view payments.</td></tr>";
+    try {
+      let list = await fetchPayments();
+      if (q) list = list.filter(p => (p.bookingRef || "").toLowerCase().includes(q));
+      tbody.innerHTML = list.map(p => `
+        <tr>
+          <td class="sub">${esc((p.createdAt||"").slice(0,16).replace("T"," "))}</td>
+          <td><b>${esc(p.bookingRef || "—")}</b></td>
+          <td>${esc(p.provider || "—")}</td>
+          <td><span class="badge ${p.status==='paid'?'ok':p.status==='failed'?'bad':'warn'}">${esc(p.status || "—")}</span></td>
+          <td>${esc(p.currency || "USD")} ${esc(Number(p.amountUSD||0).toFixed(0))}</td>
+          <td class="actions">
+            <a class="btn small" href="../fly/confirmation.html?ref=${encodeURIComponent(p.bookingRef||'')}" target="_blank">View booking</a>
+          </td>
+        </tr>
+      `).join("") || "<tr><td colspan='6' class='sub'>No payments yet</td></tr>";
+    } catch (e) {
+      tbody.innerHTML = "<tr><td colspan='6' class='sub'>Error: " + esc(e.message || String(e)) + "</td></tr>";
+    }
   }
   render();
 </script>

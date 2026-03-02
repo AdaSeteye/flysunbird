@@ -584,9 +584,23 @@ def delete_time_entry(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("ops","admin","superadmin")),
 ):
+    """Remove a slot (time entry). Not allowed if the slot has any paid booking."""
     t = db.get(TimeEntry, time_entry_id)
     if not t:
         raise HTTPException(status_code=404, detail="Not found")
+    paid_count = (
+        db.query(Booking)
+        .filter(
+            Booking.time_entry_id == time_entry_id,
+            Booking.payment_status == "paid",
+        )
+        .count()
+    )
+    if paid_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot remove slot: it has paid booking(s).",
+        )
     db.delete(t)
     log_audit(db, user.id, "time_entry.delete", "time_entry", time_entry_id, {})
     db.commit()
@@ -721,17 +735,7 @@ def update_slot_rule(
     db.commit()
     return SlotRuleOut(id=r.id, **body.model_dump())
 
-@router.post("/ops/slot-rules/{rule_id}/run-now")
-def run_slot_rule_now(
-    rule_id: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(require_roles("ops","admin","superadmin")),
-):
-    # simply enqueue generator job; for local we can call synchronously by importing
-    from app.tasks.worker_jobs import generate_slots
-    generate_slots()
-    log_audit(db, user.id, "slot_rule.run_now", "slot_rule", rule_id, {})
-    return {"ok": True}
+# Slot generation from rules is disabled. Slots are created only by Ops via Fill slots (daily) (POST /ops/slots/fill).
 
 # -------------------------
 # PAYMENTS (LIST)
@@ -901,11 +905,16 @@ def get_payment_status(user: User = Depends(require_roles("ops","admin","superad
     """Return whether payment/ticket config is set (no secrets)."""
     from app.core.config import settings
     stripe_ok = bool(getattr(settings, "STRIPE_SECRET_KEY", None) and str(getattr(settings, "STRIPE_SECRET_KEY", "") or "").strip())
+    selcom_ok = bool(
+        getattr(settings, "SELCOM_BASE_URL", None) and getattr(settings, "SELCOM_API_KEY", None)
+        and getattr(settings, "SELCOM_API_SECRET", None) and getattr(settings, "SELCOM_VENDOR", None)
+    )
     client_base = (getattr(settings, "CLIENT_BASE_URL", None) or "").strip()
     api_public = (getattr(settings, "API_PUBLIC_URL", None) or "").strip()
     ticket_dir = getattr(settings, "TICKET_LOCAL_DIR", "") or "./data/tickets"
     return {
         "stripeConfigured": stripe_ok,
+        "selcomConfigured": selcom_ok,
         "clientBaseUrlSet": bool(client_base),
         "apiPublicUrlSet": bool(api_public),
         "ticketLocalDir": ticket_dir,
@@ -1009,5 +1018,11 @@ def ops_patch_location(loc_id: str, body: LocationPatch, db: Session = Depends(g
 def ops_delete_location(loc_id: str, db: Session = Depends(get_db), user: User = Depends(require_roles("ops","admin","superadmin"))):
     l = db.get(Location, loc_id)
     if not l: return {"ok": True}
+    # Reject if any route uses this location's name (case-insensitive) as from_label
+    name_upper = (l.name or "").strip().upper()
+    if name_upper:
+        in_use = db.query(Route).filter(func.upper(Route.from_label) == name_upper).first()
+        if in_use:
+            raise HTTPException(status_code=400, detail="Cannot delete location: it is referenced by routes (from_label).")
     db.delete(l); db.commit()
     return {"ok": True}

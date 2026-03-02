@@ -91,7 +91,8 @@ code.k{display:block;white-space:pre-wrap;word-break:break-word;background:rgba(
 .ops-cal .d:hover{filter:brightness(1.12)}
 .ops-cal .d.disabled{opacity:0.4;cursor:not-allowed}
 .ops-cal .d.sel{outline:2px solid rgba(56,189,248,0.8);outline-offset:-2px}
-.ops-cal .d.no-slots{opacity:0.7}
+.ops-cal .d.no-slots,.ops-cal .d.inactive{opacity:0.7;pointer-events:none;cursor:default}
+.ops-cal .d.no-slots:hover,.ops-cal .d.inactive:hover{filter:none}
 .ops-cal .d .dw{font-size:10px;color:var(--muted);line-height:1;text-align:center}
 .ops-cal .d .p{font-size:13px;font-weight:600;line-height:1;text-align:center}
 .ops-cal .d .pr{font-size:11px;font-weight:600;color:var(--muted);line-height:1.15;text-align:center}

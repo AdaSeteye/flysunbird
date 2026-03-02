@@ -130,6 +130,43 @@ def calendar_availability(
     return out
 
 
+@router.get("/public/slot-dates")
+def list_dates_with_slots(
+    from_label: str,
+    db: Session = Depends(get_db),
+):
+    """Return dates that have at least one slot (time entry) for the given origin. Useful to see which dates are currently in the DB."""
+    from_trim = _normalize_from_label(from_label)
+    routes = db.query(Route.id).filter(
+        Route.active == True,
+        func.lower(Route.from_label) == from_trim.lower(),
+    ).all()
+    route_ids = [r.id for r in routes]
+    if not route_ids:
+        return {"from_label": from_trim, "dates": []}
+    rows = (
+        db.query(TimeEntry.date_str)
+        .filter(
+            TimeEntry.route_id.in_(route_ids),
+            TimeEntry.visibility == "PUBLIC",
+            TimeEntry.status == "PUBLISHED",
+            TimeEntry.seats_available > 0,
+        )
+        .distinct()
+        .order_by(TimeEntry.date_str.asc())
+        .all()
+    )
+    dates = [r[0] for r in rows]
+    # Apply same rules as calendar: Dar es Salaam Airport has no flights on Tuesday or Sunday
+    if from_trim.lower() == "dar es salaam airport":
+        excluded = _dar_es_salaam_airport_excluded_weekdays()
+        dates = [
+            d for d in dates
+            if datetime.strptime(d, "%Y-%m-%d").date().weekday() not in excluded
+        ]
+    return {"from_label": from_trim, "dates": dates}
+
+
 @router.get("/public/time-entries")
 def list_time_entries(
     dateStr: str,

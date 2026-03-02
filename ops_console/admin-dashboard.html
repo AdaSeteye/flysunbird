@@ -58,18 +58,13 @@
 
         <div class="sep"></div>
 
-        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="./fly/booking.html" target="_blank">
-          <span>👤</span><span>Open Client Booking</span>
-        </a>
-        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="./fly/passenger.html" target="_blank">
-          <span>🧍</span><span>Open Passenger Form</span>
-        </a>
-        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="./fly/payment.html" target="_blank">
-          <span>💳</span><span>Open Payment Page</span>
-        </a>
-        <a class="nav-link" data-roles="ops,admin,superadmin,finance" href="./fly/ticket.html" target="_blank">
-          <span>🎫</span><span>Open Ticket Page</span>
-        </a>
+        <details class="nav-details" data-roles="ops,admin,superadmin,finance">
+          <summary class="nav-link"><span>🔗</span><span>Open client pages</span></summary>
+          <a class="nav-link sub" href="./fly/booking.html" target="_blank"><span>👤</span><span>Client Booking</span></a>
+          <a class="nav-link sub" href="./fly/passenger.html" target="_blank"><span>🧍</span><span>Passenger Form</span></a>
+          <a class="nav-link sub" href="./fly/payment.html" target="_blank"><span>💳</span><span>Payment Page</span></a>
+          <a class="nav-link sub" href="./fly/ticket.html" target="_blank"><span>🎫</span><span>Ticket Page</span></a>
+        </details>
       </nav>
 
       <div class="sb-foot">
@@ -107,6 +102,12 @@
       if (!apiBase || !token) return;
       try {
         const res = await fetch(apiBase + "/auth/me", { headers: { "Authorization": "Bearer " + token } });
+        if (res.status === 401) {
+          localStorage.removeItem("FSB_TOKEN");
+          localStorage.removeItem("FSB_REFRESH_TOKEN");
+          window.location.replace("login.html");
+          return;
+        }
         if (res.ok) {
           const me = await res.json();
           userRole = (me.role || "").toLowerCase();

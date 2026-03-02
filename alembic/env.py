@@ -23,9 +23,13 @@ from app.models.slot_rule import SlotRule  # noqa: F401
 def ensure_alembic_version_table(connection) -> None:
     # Alembic defaults alembic_version.version_num to VARCHAR(32), but our revision ids are longer.
     # Pre-create / widen the column to avoid migration failures.
-    connection.execute(
-        text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(64) NOT NULL);")
-    )
+    try:
+        connection.execute(
+            text("CREATE TABLE IF NOT EXISTS alembic_version (version_num VARCHAR(64) NOT NULL);")
+        )
+    except Exception:
+        # Table or type may already exist (e.g. from a previous run or race). Continue.
+        pass
     try:
         connection.execute(text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(64);"))
     except Exception:
