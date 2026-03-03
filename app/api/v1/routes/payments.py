@@ -177,12 +177,14 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
     def _decode_url(val: str) -> str:
         if not val or not isinstance(val, str):
             return val or ""
-        try:
-            decoded = base64.b64decode(val).decode("utf-8")
-            if decoded.startswith("http://") or decoded.startswith("https://"):
-                return decoded
-        except Exception:
-            pass
+        for attempt in (val, val + "==", val + "="):  # try with padding
+            for decoder in (base64.b64decode, base64.urlsafe_b64decode):
+                try:
+                    decoded = decoder(attempt).decode("utf-8")
+                    if decoded.startswith("http://") or decoded.startswith("https://"):
+                        return decoded
+                except Exception:
+                    continue
         return val
 
     logger.info("Selcom create-order response: %s", resp)
@@ -199,7 +201,8 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
                 if isinstance(first, str) and first.startswith("http"):
                     url = first
                 elif isinstance(first, dict):
-                    for key in ("link", "url", "payment_url", "redirect_url", "payment_gateway_url"):
+                    # Prefer payment_gateway_url (create-order-minimal); then link/url
+                    for key in ("payment_gateway_url", "link", "url", "payment_url", "redirect_url"):
                         if first.get(key) and isinstance(first.get(key), str):
                             raw = first.get(key)
                             url = _decode_url(raw) if key == "payment_gateway_url" else raw
@@ -252,6 +255,12 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         logger.exception("Selcom payment record save failed: %s", e)
         raise HTTPException(status_code=502, detail="Payment record failed")
 
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        logger.info("Selcom redirect: host=%r path=%r", parsed.netloc, (parsed.path or "")[:80])
+    except Exception:
+        pass
     return {"ok": True, "url": url, "bookingRef": b.booking_ref}
 
 
