@@ -155,6 +155,12 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
 
         from app.services.selcom_service import create_checkout_order
 
+        client_base = (settings.CLIENT_BASE_URL or "").rstrip("/")
+        api_public = (settings.API_PUBLIC_URL or "").rstrip("/")
+        redirect_url = f"{client_base}/fly/confirmation.html?ref={b.booking_ref}" if client_base else None
+        cancel_url = f"{client_base}/fly/payment.html?bookingRef={b.booking_ref}" if client_base else None
+        webhook_url = f"{api_public}/api/v1/webhooks/selcom" if api_public else None
+
         resp = create_checkout_order(
             order_id=b.booking_ref,
             amount=amount_tzs,
@@ -162,6 +168,9 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
             buyer_email=buyer_email or "customer@flysunbird.co.tz",
             buyer_phone=buyer_phone or "255000000000",
             currency="TZS",
+            redirect_url=redirect_url,
+            cancel_url=cancel_url,
+            webhook_url=webhook_url,
         )
     except HTTPException:
         raise
