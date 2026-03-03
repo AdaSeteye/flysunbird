@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.db.session import get_db
 from app.models.route import Route
+from app.models.location import Location
 from app.models.time_entry import TimeEntry
 from app.schemas.ops_payload import PublicRouteOut
 from app.services.ops_payload_service import build_ops_payload, to_ops_b64url
@@ -38,6 +39,46 @@ def _time_entry_price_usd(t) -> int:
     if getattr(t, "base_price_usd", 0) not in (0, None):
         return t.base_price_usd
     return t.price_usd
+
+@router.get("/public/origins")
+def list_origins(db: Session = Depends(get_db)):
+    """List booking origins from Service Locations. Only "Name Sub" per sub; bare name only when no location with that name has subs (so Dar es Salaam never appears if Dar es Salaam Airport exists)."""
+    locations = db.query(Location).filter(Location.active == True).order_by(Location.region.asc(), Location.name.asc()).all()
+    # Names that have at least one sub anywhere: do not show bare name for these
+    names_that_have_subs = set()
+    for loc in locations:
+        name = (loc.name or "").strip()
+        subs = loc.subs
+        if name and subs:
+            names_that_have_subs.add(name)
+    origins = []
+    seen = set()
+    for loc in locations:
+        name = (loc.name or "").strip()
+        subs = loc.subs
+        region_raw = (loc.region or "").lower()
+        if "zanzibar" in region_raw or (name and "zanzibar" in name.lower()):
+            region_group = "ZANZIBAR"
+        elif "other" in region_raw or (name and "other" in name.lower()):
+            region_group = "OTHER"
+        else:
+            region_group = "DAR"
+        if not name:
+            continue
+        if subs:
+            labels = [f"{name} {sub}".strip() for sub in subs if (f"{name} {sub}".strip())]
+        else:
+            # No subs: only add bare name if no other location with this name has subs
+            if name in names_that_have_subs:
+                continue
+            labels = [name]
+        for label in labels:
+            if not label or label in seen:
+                continue
+            seen.add(label)
+            origins.append({"label": label, "region": region_group})
+    return {"origins": origins}
+
 
 @router.get("/public/routes", response_model=list[PublicRouteOut])
 def list_routes(db: Session = Depends(get_db)):

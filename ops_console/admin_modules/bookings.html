@@ -152,33 +152,15 @@
       sel.innerHTML = '<option value="">— Sign in to load origins —</option>';
       return;
     }
-    var allowedOrigins = ['Dar es Salaam Airport', 'Zanzibar Airport', 'Zanzibar Nungwi', 'Zanzibar Seacliff', 'Zanzibar Paje', 'Paje'];
-    var excludedOrigins = ['Zanzibar Stone Town', 'Zanzibar Kendwa Rocks'];
     try {
-      const res = await fetch(API_BASE + '/public/routes');
-      const routes = res.ok ? await res.json() : [];
-      const byRegion = { DAR: [], ZANZIBAR: [] };
-      (routes || []).forEach(function(r){
-        var fromLabel = (r.from != null ? r.from : r.from_) ? String(r.from != null ? r.from : r.from_).trim() : '';
-        if (!fromLabel || excludedOrigins.indexOf(fromLabel) !== -1) return;
-        if (allowedOrigins.indexOf(fromLabel) === -1) return;
-        var region = (r.mainRegion || '').toUpperCase();
-        if (region === 'ZANZIBAR') {
-          if (byRegion.ZANZIBAR.indexOf(fromLabel) === -1) byRegion.ZANZIBAR.push(fromLabel);
-        } else {
-          if (byRegion.DAR.indexOf(fromLabel) === -1) byRegion.DAR.push(fromLabel);
-        }
-      });
-      byRegion.DAR.sort();
-      byRegion.ZANZIBAR.sort();
-      var html = '<option value="">— Select origin —</option>';
-      if (byRegion.DAR.length) {
-        html += '<optgroup label="Dar es Salaam">' + byRegion.DAR.map(function(o){ return '<option value="'+o.replace(/"/g,'&quot;')+'">'+o+'</option>'; }).join('') + '</optgroup>';
-      }
-      if (byRegion.ZANZIBAR.length) {
-        html += '<optgroup label="Zanzibar">' + byRegion.ZANZIBAR.map(function(o){ return '<option value="'+o.replace(/"/g,'&quot;')+'">'+o+'</option>'; }).join('') + '</optgroup>';
-      }
-      if (!byRegion.DAR.length && !byRegion.ZANZIBAR.length) html += '<option value="">— No routes (run API + seed) —</option>';
+      const res = await fetch(API_BASE + '/public/origins');
+      const data = res.ok ? await res.json() : null;
+      const list = (data && data.origins) ? data.origins : [];
+      var labels = (list || []).map(function(o){ return (o.label || '').trim(); }).filter(Boolean);
+      labels = labels.filter(function(l, i, a){ return a.indexOf(l) === i; });
+      labels.sort();
+      var html = '<option value="">— Select origin —</option>' + labels.map(function(l){ return '<option value="'+l.replace(/"/g,'&quot;')+'">'+l.replace(/</g,'&lt;')+'</option>'; }).join('');
+      if (!labels.length) html = '<option value="">— No origins. Add Service Locations in admin.</option>';
       sel.innerHTML = html;
     } catch (e) {
       sel.innerHTML = '<option value="">— Could not load (check API) —</option>';

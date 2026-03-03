@@ -12,5 +12,6 @@ class EmailLog(Base):
     body: Mapped[str | None] = mapped_column(Text, nullable=True)  # stored for worker retry
     status: Mapped[str] = mapped_column(String(30), default="queued")  # queued, sent, failed
     related_booking_ref: Mapped[str] = mapped_column(String(20), default="")
+    attach_ticket_booking_ref: Mapped[str | None] = mapped_column(String(20), nullable=True)  # when set, retry sends ticket PDF
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)

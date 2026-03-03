@@ -680,6 +680,7 @@ $("#toPayment").addEventListener("click", async ()=>{
       $("#toPayment").disabled = true;
       $("#toPayment").textContent = "Creating booking…";
       const p0 = state.passengers[0] || {};
+      const refCode = (state.referralCode || "").trim();
       const body = {
         timeEntryId: state.selected.timeEntryId,
         pax: state.pax || state.passengers.length || 1,
@@ -691,6 +692,7 @@ $("#toPayment").addEventListener("click", async ()=>{
           phone: p.phone || ""
         }))
       };
+      if (refCode) body.referralCode = refCode;
       const created = await apiPost("/public/bookings", body);
       state.bookingRef = created.bookingRef;
       state.paymentStatus = created.paymentStatus || "unpaid";
@@ -714,6 +716,17 @@ $("#toPayment").addEventListener("click", async ()=>{
 });
 
 initTermsConsent();
+
+(function bindReferralCode(){
+  const el = document.getElementById("referralCode");
+  if(!el) return;
+  el.value = (state.referralCode || "").trim();
+  el.addEventListener("input", function(){
+    state.referralCode = (el.value || "").trim().slice(0, 64);
+    saveState(state);
+  });
+  el.addEventListener("blur", function(){ saveState(state); });
+})();
 
 renderSummary();
 renderPassengers();

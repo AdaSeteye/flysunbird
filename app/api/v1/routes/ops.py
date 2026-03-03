@@ -19,7 +19,7 @@ from app.schemas.location import LocationIn, LocationPatch
 from app.models.slot_rule import SlotRule
 from app.models.passenger import Passenger
 from app.models.cancellation import Cancellation
-from app.services.email_service import queue_email
+from app.services.email_service import queue_email, send_booking_confirmation_and_ticket
 from app.services.audit_service import log_audit
 from app.api.v1.routes.payments import _generate_ticket_for_booking
 from app.schemas.ops import TimeEntryIn, TimeEntryOut, SlotRuleIn, SlotRuleOut, SlotsFillRequest, SlotsFillResponse, CancellationRequestIn, CancellationDecisionIn, DashboardMetrics, DashboardSeriesPoint, WeeklyPlanImportRequest, WeeklyPlanImportResponse
@@ -213,6 +213,7 @@ def mark_paid(
     # Generate ticket PDF with QR code (scan → open PDF) so user can view ticket after mark paid
     try:
         _generate_ticket_for_booking(db, b)
+        send_booking_confirmation_and_ticket(db, b.booking_ref)
     except Exception:
         pass  # non-fatal; ticket can be generated later or via resend
 
@@ -436,8 +437,7 @@ def resend_ticket(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("ops","admin","superadmin","finance")),
 ):
-    import os
-    from app.core.config import settings
+    from app.services.ticket_service import load_ticket_pdf_bytes
 
     b = db.query(Booking).filter(Booking.booking_ref == booking_ref).first()
     if not b:
@@ -449,16 +449,24 @@ def resend_ticket(
 
     subject = f"FlySunbird Ticket • {b.booking_ref}"
     body_txt = f"Your ticket reference is {b.booking_ref}.\n\nStatus: {b.status}\nPayment: {b.payment_status}.\n\nPlease find your ticket PDF attached."
-    attachments = []
-    if getattr(b, "ticket_storage", None) == "local" and getattr(b, "ticket_object_key", None):
-        path = b.ticket_object_key
-        if not os.path.isabs(path):
-            base = getattr(settings, "TICKET_LOCAL_DIR", None) or "./data/tickets"
-            path = os.path.join(base, os.path.basename(path))
-        if os.path.isfile(path):
-            with open(path, "rb") as f:
-                attachments.append((f"{b.booking_ref}.pdf", f.read(), "application/pdf"))
-    queue_email(db, booker.email, subject, body_txt, related_booking_ref=b.booking_ref, attachments=attachments or None)
+    attachments: list[tuple[str, bytes, str]] = []
+    if getattr(b, "ticket_object_key", None):
+        pdf = load_ticket_pdf_bytes(
+            booking_ref=b.booking_ref,
+            storage=getattr(b, "ticket_storage", None) or "local",
+            object_key=b.ticket_object_key,
+        )
+        if pdf:
+            attachments.append((f"{b.booking_ref}.pdf", pdf, "application/pdf"))
+    queue_email(
+        db,
+        booker.email,
+        subject,
+        body_txt,
+        related_booking_ref=b.booking_ref,
+        attachments=attachments or None,
+        attach_ticket_booking_ref=b.booking_ref,
+    )
     log_audit(db, user.id, "ticket.resend", "booking", b.id, {"booking_ref": booking_ref, "reason": body.reason})
     db.commit()
     return {"ok": True, "sentTo": booker.email, "attachment": bool(attachments)}
@@ -844,6 +852,32 @@ OPS_MAIN_ROUTES = {
     ("Zanzibar Airport", "Paje"),
     ("Paje", "Zanzibar Nungwi"),
 }
+
+
+@router.get("/ops/route-by-labels")
+def ops_route_by_labels(
+    from_label: str,
+    to_label: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("ops", "admin", "superadmin")),
+):
+    """Return route id for the given from/to labels (for Fill slots). Any active route; 404 if none."""
+    from_trim = (from_label or "").strip()
+    to_trim = (to_label or "").strip()
+    if not from_trim or not to_trim:
+        raise HTTPException(status_code=400, detail="from_label and to_label required")
+    r = (
+        db.query(Route)
+        .filter(
+            Route.active == True,
+            func.lower(Route.from_label) == from_trim.lower(),
+            func.lower(Route.to_label) == to_trim.lower(),
+        )
+        .first()
+    )
+    if not r:
+        raise HTTPException(status_code=404, detail="No route found for this from/to. Create it first or use Create route.")
+    return {"id": str(r.id), "from": r.from_label, "to": r.to_label}
 
 
 @router.get("/ops/routes")

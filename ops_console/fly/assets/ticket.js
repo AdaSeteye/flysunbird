@@ -22,11 +22,11 @@ function setText(id, val){
   if (el) el.textContent = (val === undefined || val === null || val === "") ? "—" : String(val);
 }
 
-function renderQR(ref){
+function renderQR(ref, ticketUrlFromApi){
   var qr = document.getElementById("tQR");
   if (!qr) return;
   qr.innerHTML = "";
-  var ticketUrl = API_BASE && ref && ref !== "—" ? (API_BASE + "/public/bookings/" + encodeURIComponent(ref) + "/ticket") : null;
+  var ticketUrl = ticketUrlFromApi || (API_BASE && ref && ref !== "—" ? (API_BASE + "/public/bookings/" + encodeURIComponent(ref) + "/ticket") : null);
   if (ticketUrl && typeof QRCode !== "undefined") {
     try { new QRCode(qr, { text: ticketUrl, width: 110, height: 110 }); } catch (e) { qr.textContent = ref; }
   } else {
@@ -58,7 +58,7 @@ function renderTicket(data){
   setText("tFlight", flight);
   setText("tPassenger", passenger);
 
-  renderQR(ref);
+  renderQR(ref, data.ticketUrl);
 
   const warn = document.getElementById("tWarn");
   if (warn){
@@ -72,10 +72,9 @@ function renderTicket(data){
 
   const dlBtn = document.getElementById("downloadTicketBtn");
   if (dlBtn) {
-    dlBtn.style.display = statusLabel === "CONFIRMED" && API_BASE ? "inline-block" : "none";
-    dlBtn.onclick = () => {
-      window.open(API_BASE + "/public/bookings/" + encodeURIComponent(ref) + "/ticket", "_blank");
-    };
+    var ticketUrl = data.ticketUrl || (API_BASE ? API_BASE + "/public/bookings/" + encodeURIComponent(ref) + "/ticket" : null);
+    dlBtn.style.display = statusLabel === "CONFIRMED" && ticketUrl ? "inline-block" : "none";
+    dlBtn.onclick = () => { window.open(ticketUrl, "_blank"); };
   }
 }
 
@@ -114,7 +113,7 @@ function renderTicket(data){
   setText("tFlight", flight);
   setText("tPassenger", passenger);
 
-  renderQR(ref);
+  renderQR(ref, null);
 
   const warn = document.getElementById("tWarn");
   if (warn) warn.textContent = (statusLabel === "CONFIRMED") ? "Ticket confirmed. Print / Save PDF for boarding." : "This ticket is not confirmed yet. Complete payment / OPS confirmation to issue the final ticket.";

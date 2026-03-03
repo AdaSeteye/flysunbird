@@ -152,46 +152,87 @@ function setStep(idx){
   });
 }
 
-/* ===== From dropdown ===== */
+/* ===== From dropdown (fed by Service Locations: GET /public/origins) ===== */
 const fromDrop = $("#fromDrop");
-$("#fromBtn").addEventListener("click", ()=> fromDrop.classList.toggle("open"));
-document.addEventListener("click", (e)=>{ if(!fromDrop.contains(e.target)) fromDrop.classList.remove("open"); });
+const fromDropMenu = document.getElementById("fromDropMenu");
+$("#fromBtn").addEventListener("click", ()=> fromDrop && fromDrop.classList.toggle("open"));
+document.addEventListener("click", (e)=>{ if(fromDrop && !fromDrop.contains(e.target)) fromDrop.classList.remove("open"); });
 
-$$('#fromDrop .sub').forEach((b)=>{
-  b.addEventListener("click", ()=>{
-    state.from = b.dataset.value;
-    state.region = b.dataset.region;
-    $("#fromLabel").textContent = state.from;
-    fromDrop.classList.remove("open");
-    syncPax(Math.min(state.pax, allowedPax()));
-    validateWizard();
-    setStep(0);
-    saveState(state);
-  });
+fromDrop && fromDrop.addEventListener("click", (e)=>{
+  const b = e.target.closest(".sub");
+  if(!b) return;
+  state.from = b.dataset.value;
+  state.region = b.dataset.region || "DAR";
+  const lbl = $("#fromLabel"); if(lbl) lbl.textContent = state.from;
+  fromDrop.classList.remove("open");
+  syncPax(Math.min(state.pax, allowedPax()));
+  validateWizard();
+  setStep(0);
+  saveState(state);
 });
 
-/* ===== MOBILE SUBMENU SUPPORT (touch) ===== */
+/* Mobile submenu: delegate so dynamically added .item.has-sub work */
 (function(){
   const mq = window.matchMedia("(max-width: 760px)");
-  const parents = document.querySelectorAll("#fromDrop .item.has-sub");
-  parents.forEach(p=>{
-    p.addEventListener("click", (e)=>{
-      if(!mq.matches) return;
-      if(e.target && (e.target.classList.contains("sub") || e.target.closest(".submenu"))) return;
-      e.preventDefault();
-      p.classList.toggle("open-sub");
-    });
+  if(fromDrop) fromDrop.addEventListener("click", (e)=>{
+    if(!mq.matches) return;
+    const item = e.target.closest(".item.has-sub");
+    if(!item || e.target.closest(".submenu")) return;
+    e.preventDefault();
+    item.classList.toggle("open-sub");
   });
-  const drop = document.getElementById("fromDrop");
-  if(drop){
+  if(fromDrop){
     const obs = new MutationObserver(()=>{
-      if(!drop.classList.contains("open")){
-        drop.querySelectorAll(".item.has-sub").forEach(p=>p.classList.remove("open-sub"));
+      if(!fromDrop.classList.contains("open")){
+        fromDrop.querySelectorAll(".item.has-sub").forEach(p=>p.classList.remove("open-sub"));
       }
     });
-    obs.observe(drop, {attributes:true, attributeFilter:["class"]});
+    obs.observe(fromDrop, {attributes:true, attributeFilter:["class"]});
   }
 })();
+
+async function loadOrigins(){
+  if(!fromDropMenu) return;
+  const base = _bookingApiBase ? _bookingApiBase() : (window.FLYSUNBIRD_API_BASE || localStorage.getItem("FLYSUNBIRD_API_BASE") || (window.location.origin + "/api/v1")).replace(/\/$/, "");
+  try {
+    const res = await fetch((base || "") + "/public/origins");
+    const data = res.ok ? await res.json() : null;
+    const list = (data && data.origins) ? data.origins : [];
+    if(!list.length){
+      fromDropMenu.innerHTML = "<div class=\"hint\">No origins. Add Service Locations in admin.</div>";
+      return;
+    }
+    const byRegion = {};
+    list.forEach(o=>{
+      const r = o.region || "DAR";
+      if(!byRegion[r]) byRegion[r] = [];
+      byRegion[r].push(o.label);
+    });
+    const regionTitles = { DAR: "Dar es Salaam", ZANZIBAR: "Zanzibar", OTHER: "Other" };
+    let html = "";
+    ["DAR","ZANZIBAR","OTHER"].forEach(reg=>{
+      const labels = byRegion[reg];
+      if(!labels || !labels.length) return;
+      const title = regionTitles[reg] || reg;
+      if(labels.length === 1 && labels[0] === title){
+        html += "<div class=\"item\" data-region=\"" + reg + "\"><button class=\"sub\" data-region=\"" + reg + "\" data-value=\"" + String(labels[0]).replace(/"/g,"&quot;") + "\">" + String(labels[0]).replace(/</g,"&lt;") + "</button></div>";
+      } else {
+        html += "<div class=\"item has-sub\" data-region=\"" + reg + "\"><span>" + String(title).replace(/</g,"&lt;") + "</span><div class=\"submenu\">";
+        labels.forEach(l=>{
+          const short = l === title ? title : (l.replace(title + " ", "") || l);
+          html += "<button class=\"sub\" data-region=\"" + reg + "\" data-value=\"" + String(l).replace(/"/g,"&quot;") + "\">" + String(short).replace(/</g,"&lt;") + "</button>";
+        });
+        html += "</div></div>";
+      }
+    });
+    fromDropMenu.innerHTML = html || "<div class=\"hint\">No origins.</div>";
+    const fromLabel = $("#fromLabel");
+    if(fromLabel && state.from) fromLabel.textContent = state.from;
+  } catch(err) {
+    fromDropMenu.innerHTML = "<div class=\"hint\">Could not load origins.</div>";
+  }
+}
+loadOrigins();
 
 /* ===== Pax stepper ===== */
 const paxTop = $("#paxTop");

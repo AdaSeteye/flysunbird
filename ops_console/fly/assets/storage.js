@@ -26,6 +26,7 @@ function initState() {
     currency: "USD",
     date: null,
     selected: null, // {start,end,booked,priceUSD, dateStr}
+    referralCode: "",
     termsAcceptance: { agreed:false, agreedAt:null, version:"2025", docSha256:"edfe624c7f9b2dac0ced3b189039f693c0683123f12881d3702b0fcf4d19631d" },
     passengers: []  // array of passenger objects
   };

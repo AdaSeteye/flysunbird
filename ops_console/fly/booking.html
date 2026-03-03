@@ -29,25 +29,8 @@
               <span id="fromLabel">Select</span>
               <i class="caret" aria-hidden="true"></i>
             </button>
-            <div class="menu" role="listbox">
-              <div class="item has-sub" data-region="ZANZIBAR">
-                <span>Zanzibar</span>
-                <div class="submenu">
-                  <button class="sub" data-region="ZANZIBAR" data-value="Paje">Paje</button>
-                  <button class="sub" data-region="ZANZIBAR" data-value="Nungwi">Nungwi</button>
-                  <button class="sub" data-region="ZANZIBAR" data-value="Zanzibar Seacliff">Seacliff</button>
-                  <button class="sub" data-region="ZANZIBAR" data-value="Zanzibar Airport">Airport</button>
-                </div>
-              </div>
-              <div class="item has-sub" data-region="DAR">
-                <span>Dar es Salaam</span>
-                <div class="submenu">
-                  <button class="sub" data-region="DAR" data-value="Dar es Salaam Airport">Airport</button>
-                </div>
-              </div>
-              <div class="item" data-region="OTHER">
-                <button class="sub" data-region="OTHER" data-value="Other">Other</button>
-              </div>
+            <div class="menu" id="fromDropMenu" role="listbox">
+              <div class="hint">Loading origins…</div>
             </div>
           </div>
           <div class="hint" style="margin-top:10px">Pick your starting point to unlock available dates.</div>

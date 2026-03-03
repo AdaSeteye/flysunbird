@@ -88,6 +88,10 @@ def get_booking(booking_ref: str, db: Session = Depends(get_db)):
     if booker:
         out["contactEmail"] = booker.email
         out["contactName"] = booker.full_name
+    # Canonical ticket URL (same as QR on PDF) so ticket page can use it for its QR
+    base = (getattr(settings, "API_PUBLIC_URL", None) or "").strip().rstrip("/") or None
+    if base:
+        out["ticketUrl"] = f"{base}/api/v1/public/bookings/{b.booking_ref}/ticket"
     return out
 
 

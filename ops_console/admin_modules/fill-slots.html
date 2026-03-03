@@ -15,16 +15,30 @@
   <div id="pickSection" class="card">
     <div class="hrow">
       <div style="font-weight:900">Route &amp; date</div>
-      <div class="actions">
-        <label>Route</label>
-        <select id="routeSelect">
-          <option value="">— Select route —</option>
+    </div>
+    <div class="hr"></div>
+    <div class="row" style="align-items:flex-end;flex-wrap:wrap;gap:12px">
+      <div>
+        <label>From</label>
+        <select id="fromSelect">
+          <option value="">— Select origin —</option>
         </select>
+      </div>
+      <div>
+        <label>To</label>
+        <select id="toSelect">
+          <option value="">— Select destination —</option>
+        </select>
+      </div>
+      <div>
         <label>Date</label>
         <input id="fillDate" type="date"/>
+      </div>
+      <div>
         <button class="btn" type="button" data-label="Load existing" onclick="loadExisting(this)">Load existing</button>
       </div>
     </div>
+    <div class="sub" style="margin-top:8px">From and To are from Service Locations. The selected From is hidden in the To list.</div>
   </div>
 
   <div id="slotsSection" class="card">
@@ -74,22 +88,71 @@
     window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
   }
   const API_BASE = (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
+  let allOriginLabels = [];
 
-  async function loadRoutes() {
-    const sel = document.getElementById("routeSelect");
+  async function loadFromToDropdowns() {
+    const fromSel = document.getElementById("fromSelect");
+    const toSel = document.getElementById("toSelect");
+    if (!fromSel || !toSel) return;
     try {
-      const list = await window.OpsApi.fetch("GET", "/ops/routes");
+      const res = await fetch(API_BASE + "/public/origins");
+      const data = res.ok ? await res.json() : null;
+      const list = (data && data.origins) ? data.origins : [];
+      allOriginLabels = (list || []).map(o => (o.label || "").trim()).filter(Boolean);
       const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
-      sel.innerHTML = "<option value=\"\">— Select route —</option>" +
-        (list || []).map(r => "<option value=\"" + (r.id || "").replace(/"/g, "&quot;") + "\">" + esc(r.from || "") + " → " + esc(r.to || "") + "</option>").join("");
+      fromSel.innerHTML = "<option value=\"\">— Select origin —</option>" +
+        allOriginLabels.map(l => "<option value=\"" + esc(l).replace(/"/g,"&quot;") + "\">" + esc(l) + "</option>").join("");
+      updateToDropdown();
     } catch (e) {
-      sel.innerHTML = "<option value=\"\">— Sign in to load routes —</option>";
+      fromSel.innerHTML = "<option value=\"\">— Could not load (check API) —</option>";
+      toSel.innerHTML = "<option value=\"\">— Select destination —</option>";
+    }
+  }
+
+  function updateToDropdown() {
+    const fromSel = document.getElementById("fromSelect");
+    const toSel = document.getElementById("toSelect");
+    const fromVal = (fromSel && fromSel.value || "").trim();
+    const toVal = (toSel && toSel.value || "").trim();
+    const options = fromVal ? allOriginLabels.filter(l => l !== fromVal) : allOriginLabels.slice();
+    const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
+    toSel.innerHTML = "<option value=\"\">— Select destination —</option>" +
+      options.map(l => "<option value=\"" + esc(l).replace(/"/g,"&quot;") + "\">" + esc(l) + "</option>").join("");
+    if (toVal && toVal !== fromVal && options.indexOf(toVal) !== -1) toSel.value = toVal;
+    else toSel.value = "";
+  }
+
+  async function getRouteId(fromLabel, toLabel) {
+    if (!fromLabel || !toLabel) return null;
+    try {
+      const r = await window.OpsApi.fetch("GET", "/ops/route-by-labels?from_label=" + encodeURIComponent(fromLabel) + "&to_label=" + encodeURIComponent(toLabel));
+      return r && r.id ? r.id : null;
+    } catch (e) {
+      if (e.message && e.message.indexOf("404") !== -1) {
+        try {
+          const created = await window.OpsApi.fetch("POST", "/ops/routes?fromLabel=" + encodeURIComponent(fromLabel) + "&toLabel=" + encodeURIComponent(toLabel));
+          return created && created.id ? created.id : null;
+        } catch (e2) {
+          return null;
+        }
+      }
+      return null;
     }
   }
 
   async function loadExisting(btn) {
-    const routeId = document.getElementById("routeSelect").value.trim();
+    const fromLabel = (document.getElementById("fromSelect") && document.getElementById("fromSelect").value || "").trim();
+    const toLabel = (document.getElementById("toSelect") && document.getElementById("toSelect").value || "").trim();
     const dateStr = document.getElementById("fillDate").value;
+    if (!fromLabel || !toLabel || !dateStr) {
+      alert("Select From, To, and Date first.");
+      return;
+    }
+    const routeId = await getRouteId(fromLabel, toLabel);
+    if (!routeId) {
+      alert("Could not find or create route for this From/To.");
+      return;
+    }
     if (!routeId || !dateStr) {
       alert("Select a route and date first.");
       return;
@@ -165,10 +228,16 @@
   }
 
   async function saveFill(btn) {
-    const routeId = document.getElementById("routeSelect").value.trim();
+    const fromLabel = (document.getElementById("fromSelect") && document.getElementById("fromSelect").value || "").trim();
+    const toLabel = (document.getElementById("toSelect") && document.getElementById("toSelect").value || "").trim();
     const dateStr = document.getElementById("fillDate").value;
-    if (!routeId || !dateStr) {
-      alert("Select a route and date first.");
+    if (!fromLabel || !toLabel || !dateStr) {
+      alert("Select From, To, and Date first.");
+      return;
+    }
+    const routeId = await getRouteId(fromLabel, toLabel);
+    if (!routeId) {
+      alert("Could not find or create route for this From/To.");
       return;
     }
     const slots = collectSlotsFromTable();
@@ -193,6 +262,8 @@
 
   document.getElementById("fillDate").value = new Date().toISOString().slice(0, 10);
   addSlotRow();
-  loadRoutes().catch(function() {});
+  var fromSel = document.getElementById("fromSelect");
+  if (fromSel) fromSel.addEventListener("change", updateToDropdown);
+  loadFromToDropdowns().catch(function() {});
 </script>
 </body></html>

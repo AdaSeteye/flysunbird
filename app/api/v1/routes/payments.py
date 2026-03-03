@@ -1,4 +1,5 @@
 from __future__ import annotations
+import base64
 import json
 import logging
 import uuid
@@ -20,7 +21,7 @@ from app.models.passenger import Passenger
 from app.models.user import User
 from app.models.pilot import PilotAssignment
 from app.services.audit_service import log_audit
-from app.services.email_service import queue_email
+from app.services.email_service import queue_email, send_booking_confirmation_and_ticket
 from app.services.ticket_service import render_ticket_pdf_bytes, store_ticket_pdf
 from app.services.settings_service import get_usd_to_tzs_rate
 from app.schemas.payments import RefundRequest, StripeCreateCheckoutSessionRequest, SelcomCreateOrderRequest
@@ -51,6 +52,7 @@ def _confirm_booking_paid_from_webhook(db: Session, booking_ref: str, provider_r
     log_audit(db, actor_user_id=provider, action="payment_paid_webhook", entity_type="booking", entity_id=b.booking_ref, details={"status": status, **details})
     _notify_pilot_if_assigned(db, b)
     _generate_ticket_for_booking(db, b)
+    send_booking_confirmation_and_ticket(db, b.booking_ref)
     db.commit()
 
 
@@ -170,7 +172,19 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         log_audit(db, actor_user_id="public", action="payment_failed", entity_type="booking", entity_id=getattr(req, "bookingRef", ""), details={"selcom_error": str(e)})
         raise HTTPException(status_code=502, detail=str(e))
 
-    # Selcom response: structure may vary; try common keys for payment/redirect URL
+    # Selcom response: structure may vary; try common keys for payment/redirect URL.
+    # Create-order-minimal returns data[0].payment_gateway_url (base64-encoded per Selcom docs).
+    def _decode_url(val: str) -> str:
+        if not val or not isinstance(val, str):
+            return val or ""
+        try:
+            decoded = base64.b64decode(val).decode("utf-8")
+            if decoded.startswith("http://") or decoded.startswith("https://"):
+                return decoded
+        except Exception:
+            pass
+        return val
+
     logger.info("Selcom create-order response: %s", resp)
     url = None
     if isinstance(resp, dict):
@@ -185,22 +199,32 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
                 if isinstance(first, str) and first.startswith("http"):
                     url = first
                 elif isinstance(first, dict):
-                    for key in ("link", "url", "payment_url", "redirect_url"):
+                    for key in ("link", "url", "payment_url", "redirect_url", "payment_gateway_url"):
                         if first.get(key) and isinstance(first.get(key), str):
-                            url = first.get(key)
-                            break
+                            raw = first.get(key)
+                            url = _decode_url(raw) if key == "payment_gateway_url" else raw
+                            if url and (url.startswith("http://") or url.startswith("https://")):
+                                break
+                    else:
+                        url = None
             elif isinstance(data, dict):
-                for key in ("link", "url", "payment_url", "redirect_url"):
+                for key in ("link", "url", "payment_url", "redirect_url", "payment_gateway_url"):
                     if data.get(key) and isinstance(data.get(key), str):
-                        url = data.get(key)
-                        break
+                        raw = data.get(key)
+                        url = _decode_url(raw) if key == "payment_gateway_url" else raw
+                        if url and (url.startswith("http://") or url.startswith("https://")):
+                            break
+                else:
+                    url = None
             if not url and isinstance(data, list):
                 for item in data:
                     if isinstance(item, dict):
-                        for key in ("link", "url", "payment_url", "redirect_url"):
+                        for key in ("link", "url", "payment_url", "redirect_url", "payment_gateway_url"):
                             if item.get(key) and isinstance(item.get(key), str):
-                                url = item.get(key)
-                                break
+                                raw = item.get(key)
+                                url = _decode_url(raw) if key == "payment_gateway_url" else raw
+                                if url and (url.startswith("http://") or url.startswith("https://")):
+                                    break
                     if url:
                         break
     if not url:

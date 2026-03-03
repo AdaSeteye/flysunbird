@@ -17,6 +17,7 @@ class BookingCreate(BaseModel):
     bookerEmail: str  # plain str to allow .local and other dev domains
     bookerName: str = ""
     passengers: List[PassengerIn]
+    referralCode: Optional[str] = None
 
 class BookingOut(BaseModel):
     bookingRef: str
