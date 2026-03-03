@@ -153,7 +153,7 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         if not buyer_name:
             buyer_name = "Customer"
 
-        from app.services.selcom_service import create_checkout_order
+        from app.services.selcom_service import create_checkout_order, create_checkout_order_minimal
 
         client_base = (settings.CLIENT_BASE_URL or "").rstrip("/")
         api_public = (settings.API_PUBLIC_URL or "").rstrip("/")
@@ -161,7 +161,7 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         cancel_url = f"{client_base}/fly/payment.html?bookingRef={b.booking_ref}" if client_base else None
         webhook_url = f"{api_public}/api/v1/webhooks/selcom" if api_public else None
 
-        resp = create_checkout_order(
+        common = dict(
             order_id=b.booking_ref,
             amount=amount_tzs,
             buyer_name=buyer_name,
@@ -172,6 +172,10 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
             cancel_url=cancel_url,
             webhook_url=webhook_url,
         )
+        # Try minimal first (many vendors only have this); fallback to full Create Order if no URL
+        resp = create_checkout_order_minimal(**common)
+        if resp.get("result") != "SUCCESS":
+            resp = create_checkout_order(**common)
     except HTTPException:
         raise
     except ValueError as e:
@@ -197,48 +201,65 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         return val
 
     logger.info("Selcom create-order response: %s", resp)
-    url = None
-    if isinstance(resp, dict):
+
+    def _extract_url(r: dict) -> str | None:
+        out = None
+        if not isinstance(r, dict):
+            return None
         for key in ("url", "link", "payment_url", "redirect_url", "checkout_url"):
-            if resp.get(key) and isinstance(resp.get(key), str):
-                url = resp.get(key)
-                break
-        if not url:
-            data = resp.get("data")
-            if isinstance(data, list) and len(data) > 0:
-                first = data[0]
-                if isinstance(first, str) and first.startswith("http"):
-                    url = first
-                elif isinstance(first, dict):
-                    # Prefer payment_gateway_url (create-order-minimal); then link/url
+            if r.get(key) and isinstance(r.get(key), str):
+                return r.get(key)
+        data = r.get("data")
+        if isinstance(data, list) and len(data) > 0:
+            first = data[0]
+            if isinstance(first, str) and first.startswith("http"):
+                return first
+            if isinstance(first, dict):
+                for key in ("payment_gateway_url", "link", "url", "payment_url", "redirect_url"):
+                    if first.get(key) and isinstance(first.get(key), str):
+                        raw = first.get(key)
+                        out = _decode_url(raw) if key == "payment_gateway_url" else raw
+                        if out and (out.startswith("http://") or out.startswith("https://")):
+                            return out
+        if isinstance(data, dict):
+            for key in ("payment_gateway_url", "link", "url", "payment_url", "redirect_url"):
+                if data.get(key) and isinstance(data.get(key), str):
+                    raw = data.get(key)
+                    out = _decode_url(raw) if key == "payment_gateway_url" else raw
+                    if out and (out.startswith("http://") or out.startswith("https://")):
+                        return out
+        if not out and isinstance(data, list):
+            for item in data:
+                if isinstance(item, dict):
                     for key in ("payment_gateway_url", "link", "url", "payment_url", "redirect_url"):
-                        if first.get(key) and isinstance(first.get(key), str):
-                            raw = first.get(key)
-                            url = _decode_url(raw) if key == "payment_gateway_url" else raw
-                            if url and (url.startswith("http://") or url.startswith("https://")):
-                                break
-                    else:
-                        url = None
-            elif isinstance(data, dict):
-                for key in ("link", "url", "payment_url", "redirect_url", "payment_gateway_url"):
-                    if data.get(key) and isinstance(data.get(key), str):
-                        raw = data.get(key)
-                        url = _decode_url(raw) if key == "payment_gateway_url" else raw
-                        if url and (url.startswith("http://") or url.startswith("https://")):
-                            break
-                else:
-                    url = None
-            if not url and isinstance(data, list):
-                for item in data:
-                    if isinstance(item, dict):
-                        for key in ("link", "url", "payment_url", "redirect_url", "payment_gateway_url"):
-                            if item.get(key) and isinstance(item.get(key), str):
-                                raw = item.get(key)
-                                url = _decode_url(raw) if key == "payment_gateway_url" else raw
-                                if url and (url.startswith("http://") or url.startswith("https://")):
-                                    break
-                    if url:
-                        break
+                        if item.get(key) and isinstance(item.get(key), str):
+                            raw = item.get(key)
+                            out = _decode_url(raw) if key == "payment_gateway_url" else raw
+                            if out and (out.startswith("http://") or out.startswith("https://")):
+                                return out
+                if out:
+                    break
+        return out
+
+    url = _extract_url(resp)
+    if not url:
+        try:
+            from app.services.selcom_service import create_checkout_order
+            client_base = (settings.CLIENT_BASE_URL or "").rstrip("/")
+            api_public = (settings.API_PUBLIC_URL or "").rstrip("/")
+            redirect_url = f"{client_base}/fly/confirmation.html?ref={b.booking_ref}" if client_base else None
+            cancel_url = f"{client_base}/fly/payment.html?bookingRef={b.booking_ref}" if client_base else None
+            webhook_url = f"{api_public}/api/v1/webhooks/selcom" if api_public else None
+            resp = create_checkout_order(
+                order_id=b.booking_ref, amount=amount_tzs, buyer_name=buyer_name,
+                buyer_email=buyer_email or "customer@flysunbird.co.tz",
+                buyer_phone=buyer_phone or "255000000000", currency="TZS",
+                redirect_url=redirect_url, cancel_url=cancel_url, webhook_url=webhook_url,
+            )
+            logger.info("Selcom full create-order fallback response: %s", resp)
+            url = _extract_url(resp)
+        except Exception as e:
+            logger.warning("Selcom full create-order fallback failed: %s", e)
     if not url:
         msg = (resp.get("message") if isinstance(resp, dict) else None) or (resp.get("result") if isinstance(resp, dict) else None)
         detail = "Selcom did not return a payment URL."
@@ -264,10 +285,12 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         logger.exception("Selcom payment record save failed: %s", e)
         raise HTTPException(status_code=502, detail="Payment record failed")
 
+    # Log exact redirect URL for Selcom support if gateway shows "Page Not Found"
     try:
         from urllib.parse import urlparse
         parsed = urlparse(url)
         logger.info("Selcom redirect: host=%r path=%r", parsed.netloc, (parsed.path or "")[:80])
+        logger.info("Selcom redirect full URL (share with Selcom if 404): %s", url)
     except Exception:
         pass
     return {"ok": True, "url": url, "bookingRef": b.booking_ref}

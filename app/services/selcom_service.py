@@ -101,3 +101,59 @@ def create_checkout_order(
     if not isinstance(response, dict):
         response = {}
     return response
+
+
+def create_checkout_order_minimal(
+    order_id: str,
+    amount: int,
+    buyer_name: str,
+    buyer_email: str,
+    buyer_phone: str,
+    currency: str = "TZS",
+    *,
+    redirect_url: str | None = None,
+    cancel_url: str | None = None,
+    webhook_url: str | None = None,
+) -> dict[str, Any]:
+    """
+    Create order via Create Order - Minimal (wallet / manual focus).
+    Use when full Create Order is not enabled for vendor or returns invalid URL.
+    All URLs in request are base64-encoded per Selcom docs.
+    """
+    base = (settings.SELCOM_BASE_URL or "").rstrip("/")
+    key = (settings.SELCOM_API_KEY or "").strip()
+    secret = (settings.SELCOM_API_SECRET or "").strip()
+    vendor = (settings.SELCOM_VENDOR or "").strip()
+    if not all([base, key, secret, vendor]):
+        raise ValueError("Selcom is not configured")
+
+    try:
+        from selcom_apigw_client import apigwClient
+    except ImportError:
+        raise ValueError("selcom-apigw-client not installed. pip install selcom-apigw-client")
+
+    client = apigwClient.Client(base, key, secret)
+    order_path = "/checkout/create-order-minimal"
+    order_data = {
+        "vendor": vendor,
+        "order_id": order_id,
+        "buyer_email": (buyer_email or "customer@flysunbird.co.tz")[:255],
+        "buyer_name": (buyer_name or "Customer")[:120],
+        "buyer_phone": (buyer_phone or "255000000000").replace(" ", "")[:20],
+        "amount": amount,
+        "currency": (currency or "TZS").upper(),
+        "buyer_remarks": "FlySunbird booking " + order_id,
+        "merchant_remarks": order_id,
+        "no_of_items": 1,
+    }
+    if redirect_url:
+        order_data["redirect_url"] = _b64_url(redirect_url)
+    if cancel_url:
+        order_data["cancel_url"] = _b64_url(cancel_url)
+    if webhook_url:
+        order_data["webhook"] = _b64_url(webhook_url)
+
+    response = client.postFunc(order_path, order_data)
+    if not isinstance(response, dict):
+        response = {}
+    return response
