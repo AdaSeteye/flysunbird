@@ -291,6 +291,8 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         parsed = urlparse(url)
         logger.info("Selcom redirect: host=%r path=%r", parsed.netloc, (parsed.path or "")[:80])
         logger.info("Selcom redirect full URL (share with Selcom if 404): %s", url)
+        # print() so it always appears in docker logs (app logger may be WARNING)
+        print(f"[Selcom] redirect URL (if 404, send to Selcom support): {url}", flush=True)
     except Exception:
         pass
     return {"ok": True, "url": url, "bookingRef": b.booking_ref}
