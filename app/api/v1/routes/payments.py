@@ -201,6 +201,13 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         return val
 
     logger.info("Selcom create-order response: %s", resp)
+    # Print details so they always show in docker logs (for Selcom support)
+    try:
+        print("[Selcom] API response: result=%s resultcode=%s message=%s" % (
+            resp.get("result"), resp.get("resultcode"), resp.get("message")), flush=True)
+        print("[Selcom] Full response (for support): %s" % json.dumps(resp, default=str), flush=True)
+    except Exception:
+        pass
 
     def _extract_url(r: dict) -> str | None:
         out = None
@@ -293,6 +300,7 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         logger.info("Selcom redirect full URL (share with Selcom if 404): %s", url)
         # print() so it always appears in docker logs (app logger may be WARNING)
         print(f"[Selcom] redirect URL (if 404, send to Selcom support): {url}", flush=True)
+        print("[Selcom] --- end of create-order details ---", flush=True)
     except Exception:
         pass
     return {"ok": True, "url": url, "bookingRef": b.booking_ref}
