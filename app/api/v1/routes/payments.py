@@ -171,13 +171,13 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
-        logger.exception("Selcom create order failed: %s", e)
+        logger.exception("[Selcom] create order failed: %s", e)
         booking_ref = getattr(req, "bookingRef", "")
         log_audit(db, actor_user_id="public", action="payment_failed", entity_type="booking", entity_id=booking_ref, details={"selcom_error": str(e)})
         try:
             send_unpaid_ticket_email(db, booking_ref)
         except Exception as email_err:
-            logger.warning("Failed to send unpaid ticket email after Selcom failure: %s", email_err)
+            logger.warning("[Selcom] Failed to send unpaid ticket email after failure: %s", email_err)
         raise HTTPException(status_code=502, detail=str(e))
 
     # Selcom response: structure may vary; try common keys for payment/redirect URL. for payment/redirect URL.
@@ -195,9 +195,10 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
                     continue
         return val
 
-    logger.info("Selcom create-order response: %s", resp)
+    logger.info("[Selcom] create-order order_id=%s response: %s", b.booking_ref, resp)
     # Print details so they always show in docker logs (for Selcom support)
     try:
+        print("[Selcom] order_id=%s (booking_ref)" % (b.booking_ref,), flush=True)
         print("[Selcom] API response: result=%s resultcode=%s message=%s" % (
             resp.get("result"), resp.get("resultcode"), resp.get("message")), flush=True)
         print("[Selcom] Full response (for support): %s" % json.dumps(resp, default=str), flush=True)
@@ -258,16 +259,16 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
                 buyer_phone=buyer_phone or "255000000000", currency="TZS",
                 redirect_url=redirect_url, cancel_url=cancel_url, webhook_url=webhook_url,
             )
-            logger.info("Selcom full create-order fallback response: %s", resp)
+            logger.info("[Selcom] full create-order fallback response: %s", resp)
             url = _extract_url(resp)
         except Exception as e:
-            logger.warning("Selcom full create-order fallback failed: %s", e)
+            logger.warning("[Selcom] full create-order fallback failed: %s", e)
     if not url:
         msg = (resp.get("message") if isinstance(resp, dict) else None) or (resp.get("result") if isinstance(resp, dict) else None)
         detail = "Selcom did not return a payment URL."
         if msg:
             detail += f" Selcom: {msg}"
-        logger.warning("Selcom response missing payment URL: %s", resp)
+        logger.warning("[Selcom] response missing payment URL: %s", resp)
         raise HTTPException(status_code=502, detail=detail)
 
     try:
@@ -284,15 +285,15 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         db.add(p)
         db.commit()
     except Exception as e:
-        logger.exception("Selcom payment record save failed: %s", e)
+        logger.exception("[Selcom] payment record save failed: %s", e)
         raise HTTPException(status_code=502, detail="Payment record failed")
 
     # Log exact redirect URL for Selcom support if gateway shows "Page Not Found"
     try:
         from urllib.parse import urlparse
         parsed = urlparse(url)
-        logger.info("Selcom redirect: host=%r path=%r", parsed.netloc, (parsed.path or "")[:80])
-        logger.info("Selcom redirect full URL (share with Selcom if 404): %s", url)
+        logger.info("[Selcom] redirect: host=%r path=%r", parsed.netloc, (parsed.path or "")[:80])
+        logger.info("[Selcom] redirect full URL (share with Selcom if 404): %s", url)
         # print() so it always appears in docker logs (app logger may be WARNING)
         print(f"[Selcom] redirect URL (if 404, send to Selcom support): {url}", flush=True)
         print("[Selcom] --- end of create-order details ---", flush=True)
@@ -315,10 +316,10 @@ async def selcom_webhook(req: Request, db: Session = Depends(get_db)):
     payment_status = (payload.get("payment_status") or "").upper()
     reference = payload.get("reference") or ""
     transid = payload.get("transid") or order_id
-    logger.info("Selcom webhook: order_id=%s result=%s payment_status=%s", order_id, result, payment_status)
+    logger.info("[Selcom] webhook: order_id=%s result=%s payment_status=%s", order_id, result, payment_status)
 
     if not order_id:
-        logger.warning("Selcom webhook: missing order_id")
+        logger.warning("[Selcom] webhook: missing order_id")
         return {"ok": True}
     booking_ref = order_id
     if result == "SUCCESS" and (payment_status == "COMPLETED" or resultcode == "000"):
@@ -391,7 +392,7 @@ def stripe_create_checkout_session(req: StripeCreateCheckoutSessionRequest, db: 
         try:
             send_unpaid_ticket_email(db, b.booking_ref)
         except Exception as email_err:
-            logger.warning("Failed to send unpaid ticket email after Stripe failure: %s", email_err)
+            logger.warning("[Stripe] Failed to send unpaid ticket email after failure: %s", email_err)
         raise HTTPException(status_code=502, detail=str(e))
 
     amount_tzs = int(amount_to_charge) if currency_stripe == "tzs" else 0
@@ -416,7 +417,7 @@ async def stripe_webhook(req: Request, db: Session = Depends(get_db)):
     """Handle Stripe checkout.session.completed and mark booking paid."""
     body = await req.body()
     sig = req.headers.get("stripe-signature") or ""
-    logger.info("Stripe webhook received (body_len=%s, has_sig=%s)", len(body), bool(sig))
+    logger.info("[Stripe] webhook received (body_len=%s, has_sig=%s)", len(body), bool(sig))
 
     if settings.STRIPE_WEBHOOK_SECRET and settings.STRIPE_WEBHOOK_SECRET.strip():
         import stripe
@@ -424,22 +425,22 @@ async def stripe_webhook(req: Request, db: Session = Depends(get_db)):
         try:
             event = stripe.Webhook.construct_event(body, sig, settings.STRIPE_WEBHOOK_SECRET)
         except Exception as e:
-            logger.warning("Stripe webhook signature verification failed: %s", e)
+            logger.warning("[Stripe] webhook signature verification failed: %s", e)
             raise HTTPException(status_code=400, detail=f"Invalid signature: {e}")
     else:
-        logger.warning("STRIPE_WEBHOOK_SECRET not set; accepting payload without verification (not for production)")
+        logger.warning("[Stripe] STRIPE_WEBHOOK_SECRET not set; accepting payload without verification (not for production)")
         event = json.loads(body.decode("utf-8") or "{}")
 
     if event.get("type") == "checkout.session.completed":
         session = event.get("data", {}).get("object", {})
         booking_ref = (session.get("metadata") or {}).get("booking_ref") or session.get("client_reference_id")
         if booking_ref:
-            logger.info("Stripe checkout.session.completed for booking_ref=%s", booking_ref)
+            logger.info("[Stripe] checkout.session.completed for booking_ref=%s", booking_ref)
             _confirm_booking_paid_from_webhook(
                 db, booking_ref=booking_ref, provider_ref=session.get("id", ""), status="completed", details={"stripe_session": session.get("id")}, provider="stripe"
             )
         else:
-            logger.warning("Stripe webhook: checkout.session.completed but no booking_ref in session")
+            logger.warning("[Stripe] webhook: checkout.session.completed but no booking_ref in session")
     return {"ok": True}
 
 

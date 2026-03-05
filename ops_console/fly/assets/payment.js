@@ -218,8 +218,12 @@ $("#payNow").addEventListener("click", async ()=>{
       });
       const data = await res.json().catch(() => ({}));
       if(!res.ok){
-        const msg = (data.error != null ? data.error : data.detail != null ? data.detail : data.message != null ? data.message : "Selcom payment could not be started");
-        throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+        var msg = data.detail != null ? data.detail : data.error != null ? data.error : data.message != null ? data.message : "Selcom payment could not be started.";
+        if (Array.isArray(msg)) msg = (msg[0] && msg[0].msg) || msg[0] || JSON.stringify(msg[0]);
+        else if (typeof msg !== "string") msg = JSON.stringify(msg);
+        if (res.status === 404 && msg.indexOf("Booking") !== -1) msg = "Booking not found. Check the booking reference or complete the booking steps first.";
+        if (res.status === 409) msg = "Booking hold expired. Please start again from the booking page.";
+        throw new Error(msg);
       }
       if(data.paymentStatus === "paid" || !data.url){
         window.location.href = "confirmation.html?ref=" + encodeURIComponent(state.bookingRef || "");
