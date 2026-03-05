@@ -21,6 +21,8 @@ class TimeEntry(Base):
     seats_available: Mapped[int] = mapped_column(Integer)
     flight_no: Mapped[str] = mapped_column(String(30), default="FSB")
     cabin: Mapped[str] = mapped_column(String(30), default="Economy")
+    aircraft_type: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    departure_location: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     # Booking-aligned controls
     visibility: Mapped[str] = mapped_column(String(12), default="PUBLIC")  # PUBLIC|HIDDEN

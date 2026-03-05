@@ -54,7 +54,7 @@
       <table class="table">
         <thead>
           <tr>
-            <th>Start (HH:MM)</th><th>End (HH:MM)</th><th>Price (USD)</th><th>Seats</th><th>Flight no</th><th>Cabin</th><th></th>
+            <th>Start</th><th>End</th><th>Price (USD)</th><th>Seats</th><th>Flight no</th><th>Cabin</th><th>Aircraft type</th><th>Departure location</th><th></th>
           </tr>
         </thead>
         <tbody id="slotsTbody"></tbody>
@@ -180,14 +180,16 @@
 
   let slotRows = [];
 
-  function addSlotRow(start, end, priceUsd, seats, flightNo, cabin) {
+  function addSlotRow(start, end, priceUsd, seats, flightNo, cabin, aircraftType, departureLocation) {
     slotRows.push({
       start: start || "09:00",
       end: end || "10:00",
       price_usd: priceUsd != null ? priceUsd : 298,
       seats_available: seats != null ? seats : 3,
       flight_no: flightNo || "FSB",
-      cabin: cabin || "Economy"
+      cabin: cabin || "Economy",
+      aircraft_type: aircraftType || "",
+      departure_location: departureLocation || ""
     });
     renderSlotRows();
   }
@@ -199,15 +201,18 @@
 
   function renderSlotRows() {
     const tbody = document.getElementById("slotsTbody");
+    const esc = function(s) { return (s == null ? "" : String(s)).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;"); };
     tbody.innerHTML = slotRows.map((row, i) => {
       const idEsc = String(i).replace(/"/g, "&quot;");
       return "<tr data-i=\"" + idEsc + "\">" +
-        "<td><input type=\"text\" class=\"slot-start\" value=\"" + (row.start || "").replace(/"/g, "&quot;") + "\" placeholder=\"09:00\"/></td>" +
-        "<td><input type=\"text\" class=\"slot-end\" value=\"" + (row.end || "").replace(/"/g, "&quot;") + "\" placeholder=\"10:00\"/></td>" +
+        "<td><input type=\"text\" class=\"slot-start\" value=\"" + esc(row.start) + "\" placeholder=\"09:00\"/></td>" +
+        "<td><input type=\"text\" class=\"slot-end\" value=\"" + esc(row.end) + "\" placeholder=\"10:00\"/></td>" +
         "<td><input type=\"number\" class=\"slot-price\" min=\"1\" value=\"" + (row.price_usd ?? 298) + "\"/></td>" +
         "<td><input type=\"number\" class=\"slot-seats\" min=\"1\" max=\"99\" value=\"" + (row.seats_available ?? 3) + "\"/></td>" +
-        "<td><input type=\"text\" class=\"slot-flight\" value=\"" + (row.flight_no || "FSB").replace(/"/g, "&quot;") + "\"/></td>" +
-        "<td><input type=\"text\" class=\"slot-cabin\" value=\"" + (row.cabin || "Economy").replace(/"/g, "&quot;") + "\"/></td>" +
+        "<td><input type=\"text\" class=\"slot-flight\" value=\"" + esc(row.flight_no || "FSB") + "\"/></td>" +
+        "<td><input type=\"text\" class=\"slot-cabin\" value=\"" + esc(row.cabin || "Economy") + "\"/></td>" +
+        "<td><input type=\"text\" class=\"slot-aircraft\" value=\"" + esc(row.aircraft_type || "") + "\" placeholder=\"e.g. R44 Raven ii\"/></td>" +
+        "<td><input type=\"text\" class=\"slot-departure\" value=\"" + esc(row.departure_location || "") + "\" placeholder=\"e.g. Nungwi Airstrip\"/></td>" +
         "<td><button type=\"button\" class=\"btn small\" onclick=\"removeSlotRow(" + i + ")\">Remove</button></td></tr>";
     }).join("");
   }
@@ -215,14 +220,20 @@
   function collectSlotsFromTable() {
     const tbody = document.getElementById("slotsTbody");
     const out = [];
-    tbody.querySelectorAll("tr").forEach((tr, i) => {
+    tbody.querySelectorAll("tr").forEach((tr) => {
       const start = (tr.querySelector(".slot-start") || {}).value || "09:00";
       const end = (tr.querySelector(".slot-end") || {}).value || "10:00";
       const price = parseInt((tr.querySelector(".slot-price") || {}).value, 10) || 298;
       const seats = parseInt((tr.querySelector(".slot-seats") || {}).value, 10) || 3;
       const flight = (tr.querySelector(".slot-flight") || {}).value || "FSB";
       const cabin = (tr.querySelector(".slot-cabin") || {}).value || "Economy";
-      out.push({ start, end, price_usd: price, seats_available: seats, flight_no: flight, cabin });
+      const aircraftType = (tr.querySelector(".slot-aircraft") || {}).value || "";
+      const departureLocation = (tr.querySelector(".slot-departure") || {}).value || "";
+      out.push({
+        start, end, price_usd: price, seats_available: seats, flight_no: flight, cabin,
+        aircraft_type: aircraftType.trim() || null,
+        departure_location: departureLocation.trim() || null
+      });
     });
     return out;
   }

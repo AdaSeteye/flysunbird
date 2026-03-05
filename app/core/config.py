@@ -52,5 +52,20 @@ class Settings(BaseSettings):
     SELCOM_API_SECRET: str = ""
     SELCOM_VENDOR: str = ""    # Vendor / Till Number
 
+    # Partners app (PHP): base URL for partner-by-code API (e.g. https://partners.flysunbird.co.tz). Empty = no lookup.
+    PARTNERS_APP_URL: str = ""
+
+    # Bootstrap admin (seed): only one admin is created. Set ADMIN_INITIAL_PASSWORD in production.
+    ADMIN_EMAIL: str = "admin@flysunbird.co.tz"
+    ADMIN_INITIAL_PASSWORD: str = "ChangeMe123!"
+
+    # Bank details for unpaid ticket
+    BANK_NAME: str = "CRDB BANK"
+    BANK_ACCOUNT_NAME: str = "PREMIER AIR LIMITED"
+    BANK_ACCOUNT_USD: str = "0250000WKYA00"
+    BANK_ACCOUNT_TZS: str = "0150000WKYA00"
+    BANK_BRANCH: str = "Palm Beach, Dar es Salaam, Tanzania"
+    BANK_SWIFT: str = "CORUTZTZXXX"
+
 
 settings = Settings()

@@ -13,18 +13,21 @@ from app.models.slot_rule import SlotRule
 from app.models.setting import Setting
 
 
-def ensure_user(db: Session, email: str, password: str, role: str, name: str):
-    u = db.query(User).filter(User.email == email).first()
-    if u:
+def ensure_bootstrap_admin(db: Session) -> None:
+    """Create exactly one admin if no users exist. Uses ADMIN_EMAIL and ADMIN_INITIAL_PASSWORD from settings."""
+    if db.query(User).filter(User.role.in_(["admin", "superadmin"])).first():
         return
+    email = (getattr(settings, "ADMIN_EMAIL", None) or "admin@flysunbird.co.tz").strip().lower()
+    password = getattr(settings, "ADMIN_INITIAL_PASSWORD", None) or "ChangeMe123!"
     db.add(
         User(
             id=str(uuid.uuid4()),
             email=email,
-            full_name=name,
-            role=role,
+            full_name="Admin",
+            role="admin",
             password_hash=hash_password(password),
             is_active=True,
+            must_change_password=True,
         )
     )
     db.commit()
@@ -42,11 +45,8 @@ def run(db=None):
             print("[seed] users table not found yet. Skipping seeding (run alembic upgrade head).")
             return
 
-        # roles
-        ensure_user(db, "admin@flysunbird.co.tz", "admin12345", "admin", "Admin")
-        ensure_user(db, "ops@flysunbird.co.tz", "ops12345", "ops", "OPS")
-        ensure_user(db, "finance@flysunbird.co.tz", "finance12345", "finance", "Finance")
-        ensure_user(db, "pilot@flysunbird.co.tz", "pilot12345", "pilot", "Pilot")
+        # Single bootstrap admin (temp password; must change on first login). No other staff seeded.
+        ensure_bootstrap_admin(db)
 
         # settings
         s = db.get(Setting, "USD_TO_TZS")

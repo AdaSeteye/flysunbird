@@ -110,6 +110,10 @@
         }
         if (res.ok) {
           const me = await res.json();
+          if (me.mustChangePassword) {
+            window.location.replace("change-password.html");
+            return;
+          }
           userRole = (me.role || "").toLowerCase();
           if (userRole === "pilot") {
             window.location.replace("pilot-dashboard.html");

@@ -187,3 +187,40 @@ def send_booking_confirmation_and_ticket(db: Session, booking_ref: str) -> bool:
         attach_ticket_booking_ref=b.booking_ref,
     )
     return True
+
+
+def send_unpaid_ticket_email(db: Session, booking_ref: str) -> bool:
+    """Send unpaid ticket PDF to the booker (e.g. on payment creation failure). Returns True if sent."""
+    from app.models.booking import Booking
+    from app.models.user import User
+    from app.services.ticket_service import build_ticket_context, render_ticket_pdf_bytes
+
+    b = db.query(Booking).filter(Booking.booking_ref == booking_ref).first()
+    if not b:
+        return False
+    booker = db.get(User, b.user_id) if b.user_id else None
+    if not booker or not (getattr(booker, "email", None) or "").strip():
+        return False
+    to_email = booker.email.strip()
+    ctx = build_ticket_context(db, b)
+    if not ctx:
+        return False
+    ctx["payment_status"] = "unpaid"
+    pdf_bytes = render_ticket_pdf_bytes(**ctx)
+    if not pdf_bytes:
+        return False
+    subject = f"FlySunbird Booking • {b.booking_ref} – Payment not completed"
+    body = (
+        f"Your booking {b.booking_ref} could not be completed via the payment link.\n\n"
+        "Please pay using the bank details on the attached ticket, or try the payment link again.\n\n"
+        "If you have already paid, please contact us with your booking reference."
+    )
+    queue_email(
+        db,
+        to_email,
+        subject,
+        body,
+        related_booking_ref=b.booking_ref,
+        attachments=[(f"{b.booking_ref}_unpaid.pdf", pdf_bytes, "application/pdf")],
+    )
+    return True

@@ -14,7 +14,7 @@ def make_booking_ref() -> str:
     import random, string
     return "FSB-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
-def create_booking(db: Session, time_entry_id: str, booker: User, pax: int, passengers: list[dict]) -> Booking:
+def create_booking(db: Session, time_entry_id: str, booker: User, pax: int, passengers: list[dict], referral_code: str | None = None) -> Booking:
     if pax < 1:
         raise ValueError("pax must be >= 1")
 
@@ -62,6 +62,7 @@ def create_booking(db: Session, time_entry_id: str, booker: User, pax: int, pass
         total_tzs=total_tzs,
         currency=getattr(te,'currency','USD') or 'USD',
         exchange_rate_used=getattr(te,'exchange_rate',None),
+        referral_code=(referral_code or "").strip() or None,
     )
     db.add(booking)
 

@@ -1,6 +1,6 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.models.user import User
@@ -12,6 +12,7 @@ from app.schemas.booking import BookingCreate, BookingOut
 from app.core.config import settings
 from app.core.security import hash_password
 from app.services.booking_service import create_booking
+from app.services.ticket_service import build_ticket_context, render_ticket_pdf_bytes
 
 router = APIRouter(tags=["bookings"])
 
@@ -35,7 +36,8 @@ def get_or_create_booker(db: Session, email: str, name: str) -> User:
 def create_public_booking(body: BookingCreate, db: Session = Depends(get_db)):
     try:
         booker = get_or_create_booker(db, body.bookerEmail, body.bookerName)
-        booking = create_booking(db, body.timeEntryId, booker, body.pax, [p.model_dump() for p in body.passengers])
+        referral = (body.referralCode or "").strip() or None
+        booking = create_booking(db, body.timeEntryId, booker, body.pax, [p.model_dump() for p in body.passengers], referral_code=referral)
         return BookingOut(
             bookingRef=booking.booking_ref,
             status=booking.status,
@@ -73,6 +75,7 @@ def get_booking(booking_ref: str, db: Session = Depends(get_db)):
         "totalTZS": getattr(b,"total_tzs",0),
         "currency": getattr(b,"currency","USD"),
         "exchangeRateUsed": getattr(b,"exchange_rate_used",None),
+        "referralCode": getattr(b, "referral_code", None),
     }
     if te:
         out["from"] = route.from_label if route else None
@@ -100,10 +103,25 @@ def download_ticket(booking_ref: str, db: Session = Depends(get_db)):
     b = db.query(Booking).filter(Booking.booking_ref == booking_ref).first()
     if not b:
         raise HTTPException(status_code=404, detail="Not found")
-    if b.payment_status != "paid":
-        raise HTTPException(status_code=409, detail="Ticket is only available after payment")
+
+    # Unpaid: generate unpaid ticket on demand (with bank details), do not store
+    if (b.payment_status or "").lower() != "paid":
+        ctx = build_ticket_context(db, b)
+        if not ctx:
+            raise HTTPException(status_code=404, detail="Booking or slot data missing")
+        ctx["payment_status"] = "unpaid"
+        pdf_bytes = render_ticket_pdf_bytes(**ctx)
+        return Response(
+            content=pdf_bytes,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'inline; filename="{booking_ref}.pdf"'},
+        )
+
+    # Paid: ensure ticket is generated and stored, then return it
     if not b.ticket_object_key:
-        raise HTTPException(status_code=404, detail="Ticket not generated yet")
+        from app.api.v1.routes.payments import _generate_ticket_for_booking
+        _generate_ticket_for_booking(db, b)
+        db.refresh(b)
 
     if b.ticket_storage == "local":
         return FileResponse(path=b.ticket_object_key, media_type="application/pdf", filename=f"{booking_ref}.pdf")

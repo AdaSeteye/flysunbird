@@ -47,7 +47,7 @@ def create_user(email: str, fullName: str = "", role: str = "ops", tempPassword:
     exists = db.query(User).filter(User.email == email_l).first()
     if exists:
         raise HTTPException(status_code=409, detail="email already exists")
-    if role not in ("ops","admin","finance","pilot","superadmin"):
+    if role not in ("ops", "admin", "finance", "pilot"):
         raise HTTPException(status_code=400, detail="invalid role")
     pw = tempPassword or (uuid.uuid4().hex[:10] + "A1!")
     u = User(
@@ -57,6 +57,7 @@ def create_user(email: str, fullName: str = "", role: str = "ops", tempPassword:
         role=role,
         password_hash=hash_password(pw),
         is_active=True,
+        must_change_password=True,
     )
     db.add(u)
     db.commit()
@@ -74,7 +75,7 @@ def update_user(user_id: str, fullName: str | None = None, role: str | None = No
     if fullName is not None:
         u.full_name = fullName
     if role is not None:
-        if role not in ("customer","ops","admin","finance","pilot","superadmin"):
+        if role not in ("customer", "ops", "admin", "finance", "pilot"):
             raise HTTPException(status_code=400, detail="invalid role")
         u.role = role
     if isActive is not None:
@@ -92,6 +93,7 @@ def reset_password(user_id: str, tempPassword: str | None = None,
         raise HTTPException(status_code=404, detail="not found")
     pw = tempPassword or (uuid.uuid4().hex[:10] + "A1!")
     u.password_hash = hash_password(pw)
+    u.must_change_password = True
     db.commit()
     log_audit(db, actor_user_id=me.email, action="password_reset", entity_type="user", entity_id=u.id, details={"email": u.email})
     queue_email(db, u.email, "FlySunbird password reset", f"Your password was reset.\nTemporary password: {pw}\nPlease change it after login.", "")

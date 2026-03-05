@@ -25,6 +25,8 @@ from app.api.v1.routes.payments import _generate_ticket_for_booking
 from app.schemas.ops import TimeEntryIn, TimeEntryOut, SlotRuleIn, SlotRuleOut, SlotsFillRequest, SlotsFillResponse, CancellationRequestIn, CancellationDecisionIn, DashboardMetrics, DashboardSeriesPoint, WeeklyPlanImportRequest, WeeklyPlanImportResponse
 from app.services.weekly_plan_service import import_weekly_plan, get_preset_legs, PRESETS
 from app.services.settings_service import get_usd_to_tzs_rate
+from app.services.partner_service import get_partner_by_code
+from app.core.config import settings
 
 router = APIRouter(tags=["ops"])
 class MoveBookingIn(BaseModel):
@@ -52,6 +54,7 @@ class OpsDraftBookingIn(BaseModel):
     passengers: list[dict] = []
     currency: str = "USD"            # USD|TZS
     exchangeRate: int | None = None  # USD->TZS used (optional override)
+    referralCode: str | None = None  # partner referral code (e.g. FSB-XXX)
 
 @router.post("/ops/bookings/create-draft")
 def ops_create_draft_booking(body: OpsDraftBookingIn, db: Session = Depends(get_db), user: User = Depends(require_roles("ops","admin","superadmin"))):
@@ -71,7 +74,8 @@ def ops_create_draft_booking(body: OpsDraftBookingIn, db: Session = Depends(get_
         db.commit()
     # reserve seats + create booking
     from app.services.booking_service import create_booking
-    booking = create_booking(db, body.timeEntryId, booker, body.pax, body.passengers)
+    referral = (body.referralCode or "").strip() or None
+    booking = create_booking(db, body.timeEntryId, booker, body.pax, body.passengers, referral_code=referral)
 
     # mark as DRAFT + ops created
     booking.status = "DRAFT"
@@ -143,6 +147,14 @@ def booking_detail(
     route = db.get(Route, te.route_id) if te else None
     pax = db.query(Passenger).filter(Passenger.booking_id == b.id).all()
     pays = db.query(Payment).filter(Payment.booking_id == b.id).order_by(Payment.created_at.desc()).all()
+
+    referral_code = getattr(b, "referral_code", None)
+    referral_from = None
+    if referral_code and (getattr(settings, "PARTNERS_APP_URL", None) or "").strip():
+        partner = get_partner_by_code(settings.PARTNERS_APP_URL.strip(), referral_code)
+        if partner:
+            referral_from = partner
+
     return {
         "bookingRef": b.booking_ref,
         "status": b.status,
@@ -155,6 +167,8 @@ def booking_detail(
         "dateStr": te.date_str if te else None,
         "contactEmail": booker.email if booker else None,
         "contactName": booker.full_name if booker else None,
+        "referralCode": referral_code,
+        "referralFrom": referral_from,
         "timeEntry": {
             "id": te.id if te else b.time_entry_id,
             "routeId": te.route_id if te else None,
@@ -536,6 +550,8 @@ def list_time_entries(
             "id": t.id, "route_id": t.route_id, "date_str": t.date_str, "start": t.start, "end": t.end,
             "price_usd": t.price_usd, "price_tzs": getattr(t, "price_tzs", None), "seats_available": t.seats_available,
             "flight_no": t.flight_no, "cabin": t.cabin,
+            "aircraft_type": getattr(t, "aircraft_type", None),
+            "departure_location": getattr(t, "departure_location", None),
             "base_price_usd": getattr(t, "base_price_usd", 0) or 0, "base_price_tzs": getattr(t, "base_price_tzs", None),
             "override_price_usd": getattr(t, "override_price_usd", None), "override_price_tzs": getattr(t, "override_price_tzs", None),
             "from_label": route.from_label if route else None,
@@ -646,6 +662,8 @@ def fill_slots_for_day(
             seats_available=s.seats_available,
             flight_no=(s.flight_no or "FSB").strip(),
             cabin=(s.cabin or "Economy").strip(),
+            aircraft_type=(s.aircraft_type or "").strip() or None,
+            departure_location=(s.departure_location or "").strip() or None,
             visibility="PUBLIC",
             status="PUBLISHED",
         )

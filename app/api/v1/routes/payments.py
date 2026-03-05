@@ -21,8 +21,12 @@ from app.models.passenger import Passenger
 from app.models.user import User
 from app.models.pilot import PilotAssignment
 from app.services.audit_service import log_audit
-from app.services.email_service import queue_email, send_booking_confirmation_and_ticket
-from app.services.ticket_service import render_ticket_pdf_bytes, store_ticket_pdf
+from app.services.email_service import queue_email, send_booking_confirmation_and_ticket, send_unpaid_ticket_email
+from app.services.ticket_service import (
+    render_ticket_pdf_bytes,
+    store_ticket_pdf,
+    build_ticket_context,
+)
 from app.services.settings_service import get_usd_to_tzs_rate
 from app.schemas.payments import RefundRequest, StripeCreateCheckoutSessionRequest, SelcomCreateOrderRequest
 
@@ -92,30 +96,16 @@ def _notify_pilot_if_assigned(db: Session, b: Booking) -> None:
 
 
 def _generate_ticket_for_booking(db: Session, b: Booking) -> None:
-    """Generate and store A4 PDF ticket, update booking fields. Idempotent."""
+    """Generate and store paid ticket PDF. Idempotent. Only for paid bookings."""
+    if b.payment_status != "paid":
+        return
     if b.ticket_status == "generated" and b.ticket_object_key:
         return
-    te = db.get(TimeEntry, b.time_entry_id)
-    if not te:
+    ctx = build_ticket_context(db, b)
+    if not ctx:
         return
-    route = db.get(Route, te.route_id) if te.route_id else None
-    route_from = route.from_label if route else "—"
-    route_to = route.to_label if route else "—"
-    first_passenger = db.query(Passenger).filter(Passenger.booking_id == b.id).order_by(Passenger.created_at.asc()).first()
-    passenger_name = f"{(first_passenger.first or '').strip()} {(first_passenger.last or '').strip()}".strip() if first_passenger else ""
-
-    pdf_bytes = render_ticket_pdf_bytes(
-        booking_ref=b.booking_ref,
-        passenger_name=passenger_name or "(Not provided)",
-        route_from=route_from,
-        route_to=route_to,
-        date_str=te.date_str,
-        start_time=te.start,
-        end_time=te.end,
-        pax=int(b.pax),
-        payment_status=b.payment_status,
-        flight_no=te.flight_no or "",
-    )
+    ctx["payment_status"] = "paid"
+    pdf_bytes = render_ticket_pdf_bytes(**ctx)
     storage, object_key = store_ticket_pdf(booking_ref=b.booking_ref, pdf_bytes=pdf_bytes)
     b.ticket_storage = storage
     b.ticket_object_key = object_key
@@ -182,10 +172,15 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         logger.exception("Selcom create order failed: %s", e)
-        log_audit(db, actor_user_id="public", action="payment_failed", entity_type="booking", entity_id=getattr(req, "bookingRef", ""), details={"selcom_error": str(e)})
+        booking_ref = getattr(req, "bookingRef", "")
+        log_audit(db, actor_user_id="public", action="payment_failed", entity_type="booking", entity_id=booking_ref, details={"selcom_error": str(e)})
+        try:
+            send_unpaid_ticket_email(db, booking_ref)
+        except Exception as email_err:
+            logger.warning("Failed to send unpaid ticket email after Selcom failure: %s", email_err)
         raise HTTPException(status_code=502, detail=str(e))
 
-    # Selcom response: structure may vary; try common keys for payment/redirect URL.
+    # Selcom response: structure may vary; try common keys for payment/redirect URL. for payment/redirect URL.
     # Create-order-minimal returns data[0].payment_gateway_url (base64-encoded per Selcom docs).
     def _decode_url(val: str) -> str:
         if not val or not isinstance(val, str):
@@ -393,6 +388,10 @@ def stripe_create_checkout_session(req: StripeCreateCheckoutSessionRequest, db: 
         session = stripe.checkout.Session.create(**session_params)
     except Exception as e:
         log_audit(db, actor_user_id="public", action="payment_failed", entity_type="booking", entity_id=b.booking_ref, details={"stripe_error": str(e)})
+        try:
+            send_unpaid_ticket_email(db, b.booking_ref)
+        except Exception as email_err:
+            logger.warning("Failed to send unpaid ticket email after Stripe failure: %s", email_err)
         raise HTTPException(status_code=502, detail=str(e))
 
     amount_tzs = int(amount_to_charge) if currency_stripe == "tzs" else 0

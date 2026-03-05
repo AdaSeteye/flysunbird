@@ -4,6 +4,7 @@ class TokenPair(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    mustChangePassword: bool = False
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -12,3 +13,8 @@ class LoginRequest(BaseModel):
 
 class RefreshRequest(BaseModel):
     refresh_token: str
+
+
+class ChangePasswordRequest(BaseModel):
+    oldPassword: str
+    newPassword: str

@@ -32,4 +32,6 @@ class Booking(Base):
     ticket_storage: Mapped[str] = mapped_column(String(16), default="local")
     ticket_status: Mapped[str] = mapped_column(String(30), default="none")  # none, generated, invalid
 
+    referral_code: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)  # partner referral (e.g. FSB-XXX)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

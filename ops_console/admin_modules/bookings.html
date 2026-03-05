@@ -84,6 +84,7 @@
     </div>
     <div class="row" style="margin-top:10px">
       <div><label>Contact Phone</label><input id="contactPhone" placeholder="+255..."/></div>
+      <div><label>Referral code</label><input id="referralCode" type="text" placeholder="Optional (e.g. FSB-XXX)" maxlength="100"/></div>
     </div>
 
     <div class="actions" style="margin-top:10px">
@@ -484,12 +485,15 @@ async function addOffline(){
     var bookerEmail = (contactEmailEl && contactEmailEl.value.trim()) || (passengers[0] && passengers[0].phone) || "ops@flysunbird.co.tz";
     var bookerNamePart = passengers[0] ? ((passengers[0].firstName||"") + " " + (passengers[0].surname||"")).trim() : "";
     var bookerName = (contactNameEl && contactNameEl.value.trim()) || bookerNamePart || "Customer";
+    var referralEl = document.getElementById("referralCode");
+    var referralVal = (referralEl && referralEl.value && referralEl.value.trim()) ? referralEl.value.trim() : null;
     var payload = {
       timeEntryId: te.id,
       pax: pax,
       bookerEmail: bookerEmail,
       bookerName: bookerName,
       currency: (currencyEl && currencyEl.value) || "USD",
+      referralCode: referralVal,
       passengers: passengers.map(function(p){
         return {
           first: p.firstName||p.first||"",
@@ -606,6 +610,14 @@ async function addOffline(){
           <div style="font-weight:900">${esc(contactStr)}</div>
           <div class="sub" style="margin-top:6px">${esc(contactSub)}</div>
         </div>
+        ${(x.referralCode || x.referralFrom) ? `
+        <div class="card" style="margin:0">
+          <div class="sub">Referral</div>
+          <div style="font-weight:900">${x.referralFrom && x.referralFrom.name ? esc(x.referralFrom.name) : esc(x.referralCode || "-")}</div>
+          ${x.referralFrom && (x.referralFrom.contact || x.referralFrom.location) ? `<div class="sub" style="margin-top:6px">${esc(x.referralFrom.contact || "")} ${x.referralFrom.location ? " • " + esc(x.referralFrom.location) : ""}</div>` : ""}
+          ${x.referralCode ? `<div class="sub" style="margin-top:4px">Code: ${esc(x.referralCode)}</div>` : ""}
+        </div>
+        ` : ""}
       </div>
 
       <div class="hr"></div>

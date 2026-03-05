@@ -19,6 +19,8 @@ class TimeEntryIn(BaseModel):
     override_price_tzs: int | None = None
     flight_no: str = "FSB"
     cabin: str = "Economy"
+    aircraft_type: str | None = None
+    departure_location: str | None = None
 
 class TimeEntryOut(TimeEntryIn):
     id: str
@@ -34,6 +36,8 @@ class SlotFillItem(BaseModel):
     seats_available: int = Field(ge=1, le=99, description="Capacity")
     flight_no: str = "FSB"
     cabin: str = "Economy"
+    aircraft_type: str | None = None
+    departure_location: str | None = None
 
 
 class SlotsFillRequest(BaseModel):
