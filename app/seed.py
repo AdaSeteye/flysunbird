@@ -14,11 +14,19 @@ from app.models.setting import Setting
 
 
 def ensure_bootstrap_admin(db: Session) -> None:
-    """Create exactly one admin if no users exist. Uses ADMIN_EMAIL and ADMIN_INITIAL_PASSWORD from settings."""
-    if db.query(User).filter(User.role.in_(["admin", "superadmin"])).first():
-        return
+    """Create exactly one admin if no users exist, or sync password from env for existing bootstrap admin."""
     email = (getattr(settings, "ADMIN_EMAIL", None) or "admin@flysunbird.co.tz").strip().lower()
-    password = getattr(settings, "ADMIN_INITIAL_PASSWORD", None) or "ChangeMe123!"
+    raw_password = getattr(settings, "ADMIN_INITIAL_PASSWORD", None)
+    password = (raw_password.strip() if isinstance(raw_password, str) and raw_password.strip() else None) or "ChangeMe123!"
+
+    existing = db.query(User).filter(User.role.in_(["admin", "superadmin"])).all()
+    if existing:
+        # Sync password from env for the bootstrap admin (same email) when ADMIN_INITIAL_PASSWORD is set
+        bootstrap = next((u for u in existing if (u.email or "").lower() == email), None)
+        if bootstrap and (isinstance(raw_password, str) and raw_password.strip()):
+            bootstrap.password_hash = hash_password(password)
+            db.commit()
+        return
     db.add(
         User(
             id=str(uuid.uuid4()),

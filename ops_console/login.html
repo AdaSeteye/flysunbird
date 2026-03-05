@@ -18,7 +18,7 @@
 <body class="admin">
   <div class="login-wrap">
     <h1>Ops / Admin</h1>
-    <p class="sub">Sign in to use the bookings inbox, mark-paid, and cancel actions.</p>
+    <p class="sub">Sign in to the ops console.</p>
     <form id="loginForm">
       <label>Email</label>
       <input type="email" id="email" placeholder="admin@flysunbird.co.tz" required/>
@@ -51,7 +51,10 @@
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
-          errEl.textContent = (data.detail || data.message || res.statusText) || "Login failed.";
+          var msg = "Invalid email or password.";
+          if (data.detail) msg = Array.isArray(data.detail) ? (data.detail[0] && data.detail[0].msg) || String(data.detail[0] || msg) : String(data.detail);
+          else if (data.message) msg = data.message;
+          errEl.textContent = msg;
           errEl.style.display = "block";
           btn.disabled = false;
           return;

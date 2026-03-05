@@ -13,9 +13,9 @@ router = APIRouter(tags=["auth"])
 def login(body: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == body.email.lower()).first()
     if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
     if not verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
     must_change = getattr(user, "must_change_password", False)
     return TokenPair(
         access_token=create_access_token(user.id),
