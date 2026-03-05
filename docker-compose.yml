@@ -45,6 +45,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://flysunbird:flysunbird@db:5432/flysunbird
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       db:
         condition: service_healthy
@@ -58,6 +59,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://flysunbird:flysunbird@db:5432/flysunbird
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       db:
         condition: service_healthy

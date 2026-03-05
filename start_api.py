@@ -5,6 +5,15 @@ Ensures tables exist before seed and app start.
 """
 import os
 import sys
+from pathlib import Path
+
+# Load .env before any code that reads os.environ (e.g. wait_for_db)
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).resolve().parent / ".env"
+    load_dotenv(env_path)
+except Exception:
+    pass
 
 # 1) Wait for DB
 import wait_for_db  # noqa: F401
