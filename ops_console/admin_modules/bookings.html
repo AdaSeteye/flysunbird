@@ -614,6 +614,7 @@ async function addOffline(){
         <div class="card" style="margin:0">
           <div class="sub">Referral</div>
           <div style="font-weight:900">${x.referralFrom && x.referralFrom.name ? esc(x.referralFrom.name) : esc(x.referralCode || "-")}</div>
+          ${x.referralFrom && x.referralFrom.company_name ? `<div class="sub" style="margin-top:4px">Company: ${esc(x.referralFrom.company_name)}</div>` : ""}
           ${x.referralFrom && (x.referralFrom.contact || x.referralFrom.location) ? `<div class="sub" style="margin-top:6px">${esc(x.referralFrom.contact || "")} ${x.referralFrom.location ? " • " + esc(x.referralFrom.location) : ""}</div>` : ""}
           ${x.referralCode ? `<div class="sub" style="margin-top:4px">Code: ${esc(x.referralCode)}</div>` : ""}
         </div>
