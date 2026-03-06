@@ -7,6 +7,14 @@ doc = fitz.open(base)
 page = doc[0]
 # Page size and rotation (must match standard; rotation != 0 can cause overlay to appear in wrong place)
 sys.stderr.write("Page rect: %s  rotation: %s\n" % (page.rect, getattr(page, "rotation", 0)))
+# Image bboxes (e.g. QR code) — use this to set _QR_RECT in ticket_service.py
+try:
+    for img in doc.get_page_images(0, full=True):
+        bbox = page.get_image_bbox(img)
+        if bbox:
+            sys.stderr.write("Image bbox: %s\n" % (bbox,))
+except Exception as e:
+    sys.stderr.write("get_images/bbox: %s\n" % e)
 blocks = page.get_text("dict")["blocks"]
 for b in blocks:
     for l in b.get("lines", []):

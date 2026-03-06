@@ -314,9 +314,12 @@ _TEMPLATE_FIELDS = [
     ("pax", (148.2, 347.6, 183.1, 358.6), lambda k: f"{k.get('pax') or 0} Seats"),
     # Amount: single number as on standard (e.g. "500")
     ("amount", (380.8, 347.6, 400.0, 358.6), lambda k: str(k.get("amount_usd") or k.get("amount_tzs") or 0)),
-    ("footer1", (102.6, 547.3, 467.5, 558.3), lambda k: f"{k.get('booking_ref')} • {(k.get('passenger_name') or 'Passenger')[:20]} • {k.get('date_str')} • {(k.get('start_time') or '').strip() or '—'}"[:70]),
-    ("footer2", (102.6, 560.5, 520, 573), lambda k: _footer2_experience(k)),
+    # Footer: wide rects so placeholder "PA-ABC123 • Jane Doe..." and "Zanzibar Stone Town → Nungwi..." are fully erased
+    ("footer1", (96, 540, 552, 570), lambda k: f"{k.get('booking_ref')} • {(k.get('passenger_name') or 'Passenger')[:20]} • {k.get('date_str')} • {(k.get('start_time') or '').strip() or '—'}"[:70]),
+    ("footer2", (96, 552, 552, 584), lambda k: _footer2_experience(k)),
 ]
+# QR code position: from template (inspect_ticket_pdf.py image bbox) — same line as "Scan for details"
+_QR_RECT = (471.8, 545.37, 541.1, 614.67)
 
 
 def _render_ticket_pdf_from_template(
@@ -377,13 +380,18 @@ def _render_ticket_pdf_from_template(
         shape.finish(fill=(1, 1, 1), color=(1, 1, 1))
         shape.commit()
         page.insert_text((x0, y1 - 2), str(val)[:80], fontsize=10, fontname="helv", rotate=rot)
-    # QR code for ticket URL (overlay on template)
+    # QR code: cover old template QR (same line as "Scan for details") then place new QR there
     try:
         ticket_url = _ticket_url(booking_ref)
         qr_bytes = _make_qr_image_bytes(ticket_url, box_size=2, border=1)
-        qr_rect = fitz.Rect(500, 430, 578, 508)
+        qr_rect = fitz.Rect(*_QR_RECT)
+        # Generous white rect to fully erase old QR
+        qr_erase = fitz.Rect(
+            max(0, _QR_RECT[0] - 4), max(0, _QR_RECT[1] - 4),
+            min(page.rect.width, _QR_RECT[2] + 4), min(page.rect.height, _QR_RECT[3] + 4),
+        )
         shape = page.new_shape()
-        shape.draw_rect(qr_rect)
+        shape.draw_rect(qr_erase)
         shape.finish(fill=(1, 1, 1), color=(1, 1, 1))
         shape.commit()
         try:
