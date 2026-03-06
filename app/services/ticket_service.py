@@ -416,6 +416,8 @@ def render_ticket_pdf_bytes(
     currency: str = "USD",
 ) -> bytes:
     """Render ticket PDF: from template if ticket_template.pdf exists, else drawn layout."""
+    import logging
+    log = logging.getLogger(__name__)
     template_path = _resolve_ticket_template_path()
     if template_path:
         try:
@@ -439,8 +441,10 @@ def render_ticket_pdf_bytes(
                 amount_tzs=amount_tzs,
                 currency=currency,
             )
-        except Exception:
-            pass  # fallback to drawn
+        except Exception as e:
+            log.warning("Ticket template render failed, using drawn layout: %s", e)
+    else:
+        log.debug("Ticket template not found (app/assets/ticket_template.pdf or TICKET_TEMPLATE_PDF_PATH), using drawn layout")
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=A4)
     w, h = A4
@@ -508,12 +512,9 @@ def render_ticket_pdf_bytes(
         c.drawString(x_left, y, f"Departure Location: {departure_location}")
         y -= 14
     c.drawString(x_left, y, f"Pax: {pax} Seats")
-    if amount_usd and amount_tzs:
-        c.drawString(x_left + 180, y, f"Amount (USD/TZS): {amount_usd} / {amount_tzs}")
-    elif amount_tzs:
-        c.drawString(x_left + 180, y, f"Amount (TZS): {amount_tzs}")
-    else:
-        c.drawString(x_left + 180, y, f"Amount (USD): {amount_usd or 0}")
+    # Single amount as on standard PDF (e.g. "500" or "298")
+    amount_val = amount_usd or amount_tzs or 0
+    c.drawString(x_left + 180, y, f"Amount (USD/TZS): {amount_val}")
     y -= 24
 
     # ----- BANK INFORMATION (unpaid only) -----
@@ -599,13 +600,13 @@ def render_ticket_pdf_bytes(
     # Drawn footer design (sunbird + company/address left, triangle pattern right)
     _draw_flysunbird_footer_design(c, x_left, x_right, 0, footer_design_height)
 
-    # ----- Footer text (above the design) -----
-    exp_short = (experience or "").split(".")[0].strip() or "Scenic"
-    footer = f"{booking_ref} • {passenger_name or 'Passenger'} • {date_str} • {start_time}"
+    # ----- Footer text (above the design) — match standard format -----
+    footer1 = f"{booking_ref} • {passenger_name or 'Passenger'} • {date_str} • {(start_time or '').strip() or '—'}"
+    footer2 = _footer2_experience({"route_from": route_from, "route_to": route_to, "pax": pax, "experience": experience})
     c.setFont("Helvetica", 8)
     c.setFillColorRGB(0, 0, 0)
-    c.drawString(x_left, footer_text_y1, footer[:95])
-    c.drawString(x_left, footer_text_y2, f"{route_from} → {route_to} • Seats: {pax} • {exp_short}")
+    c.drawString(x_left, footer_text_y1, footer1[:95])
+    c.drawString(x_left, footer_text_y2, footer2[:95])
 
     c.setFont("Helvetica", 7)
     c.setFillColorRGB(0.5, 0.5, 0.5)
