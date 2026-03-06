@@ -26,12 +26,19 @@
 
     <div class="card" id="kpis"></div>
 
-    <div class="card" id="chartSection" style="display:none">
+    <div class="card" id="needsAttentionCard" style="display:none">
+      <div class="sub" id="needsAttentionText"></div>
+      <div style="margin-top:8px"><a href="#" id="needsAttentionLink" class="btn small primary">View payments</a></div>
+    </div>
+
+    <div class="card" id="chartSection">
       <div style="font-weight:900;margin-bottom:8px">Bookings by day (last 14 days)</div>
       <div class="chart-bars" id="chartBookings"></div>
       <div style="font-weight:900;margin:16px 0 8px">Revenue by day (USD)</div>
       <div class="chart-bars" id="chartRevenue"></div>
     </div>
+
+    <div class="card" id="secondaryKpis"></div>
 
     <div class="card" id="overviewHintCard" style="display:none">
       <div class="sub">No slots today. <button type="button" class="btn small primary" id="overviewGoFillSlots">Fill slots</button></div>
@@ -86,7 +93,7 @@
       var chartBookings = document.getElementById('chartBookings');
       var chartRevenue = document.getElementById('chartRevenue');
       if (!chartSection || !chartBookings || !chartRevenue) return;
-      chartSection.style.display = (byDay.length || revByDay.length) ? 'block' : 'none';
+      chartSection.style.display = 'block';
       chartBookings.innerHTML = byDay.slice(-14).map(function(p){
         var v = p.value || 0;
         var pct = maxB ? Math.round((v / maxB) * 100) : 0;
@@ -106,11 +113,13 @@
           var bookingsRes = await fetch(API_BASE + "/ops/bookings", { headers: { "Authorization": "Bearer " + token } });
           var statsRes = await fetch(API_BASE + "/ops/dashboard/today-stats", { headers: { "Authorization": "Bearer " + token } });
           var metricsRes = await fetch(API_BASE + "/ops/dashboard/metrics?days=14", { headers: { "Authorization": "Bearer " + token } });
+          var summaryRes = await fetch(API_BASE + "/ops/dashboard/summary", { headers: { "Authorization": "Bearer " + token } });
           if (bookingsRes.status === 401 && await refreshToken()) {
             token = localStorage.getItem("FSB_TOKEN");
             bookingsRes = await fetch(API_BASE + "/ops/bookings", { headers: { "Authorization": "Bearer " + token } });
             statsRes = await fetch(API_BASE + "/ops/dashboard/today-stats", { headers: { "Authorization": "Bearer " + token } });
             metricsRes = await fetch(API_BASE + "/ops/dashboard/metrics?days=14", { headers: { "Authorization": "Bearer " + token } });
+            summaryRes = await fetch(API_BASE + "/ops/dashboard/summary", { headers: { "Authorization": "Bearer " + token } });
           }
           var list = bookingsRes.ok ? await bookingsRes.json() : [];
           var stats = statsRes.ok ? await statsRes.json() : null;
@@ -120,29 +129,60 @@
             stats = computeTodayStatsFromRules(rules);
           }
           if (!stats) stats = { inventorySlots: 0, seatsAvailable: 0 };
+          var summary = summaryRes.ok ? await summaryRes.json() : { revenue_today_usd: 0, cancellations_this_week: 0, partner_bookings_this_month: 0 };
           var pending = list.filter(function(b){ return (b.paymentStatus || "").toLowerCase() !== "paid"; }).length;
           var slotsToday = stats.inventorySlots != null ? stats.inventorySlots : 0;
+          var revenueToday = summary.revenue_today_usd != null ? summary.revenue_today_usd : 0;
           document.getElementById('kpis').innerHTML =
             '<div class="grid">' +
             '<div class="card" style="margin:0"><div class="sub">Inventory slots (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(slotsToday) + '</div></div>' +
             '<div class="card" style="margin:0"><div class="sub">Seats available (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(stats.seatsAvailable != null ? stats.seatsAvailable : 0) + '</div></div>' +
             '<div class="card" style="margin:0"><div class="sub">Bookings</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(list.length) + '</div></div>' +
             '<div class="card" style="margin:0"><div class="sub">Pending payment</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(pending) + '</div></div>' +
+            '<div class="card" style="margin:0"><div class="sub">Revenue (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">$' + esc(revenueToday) + '</div></div>' +
             '</div>';
+          var needsCard = document.getElementById('needsAttentionCard');
+          var needsText = document.getElementById('needsAttentionText');
+          var needsLink = document.getElementById('needsAttentionLink');
+          if (needsCard && needsText && needsLink) {
+            if (pending > 0) {
+              needsText.textContent = pending === 1 ? '1 booking pending payment.' : pending + ' bookings pending payment.';
+              needsLink.textContent = 'View payments';
+              needsLink.href = '#';
+              needsLink.onclick = function(){ try { var a = window.parent && window.parent.document && window.parent.document.querySelector('a.nav-link[onclick*="payments"]'); if (a) a.click(); } catch(e){} return false; };
+              needsCard.style.display = 'block';
+            } else {
+              needsCard.style.display = 'none';
+            }
+          }
           var metrics = metricsRes.ok ? await metricsRes.json() : null;
           renderCharts(metrics);
+          var secEl = document.getElementById('secondaryKpis');
+          if (secEl) {
+            var canc = summary.cancellations_this_week != null ? summary.cancellations_this_week : 0;
+            var partner = summary.partner_bookings_this_month != null ? summary.partner_bookings_this_month : 0;
+            secEl.innerHTML = '<div class="grid"><div class="card" style="margin:0"><div class="sub">Cancellations (this week)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(canc) + '</div></div><div class="card" style="margin:0"><div class="sub">Partner bookings (this month)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(partner) + '</div></div></div>';
+            secEl.style.display = 'block';
+          }
           var hintCard = document.getElementById('overviewHintCard');
           if (hintCard) {
             hintCard.style.display = slotsToday === 0 ? 'block' : 'none';
           }
+          document.getElementById('chartSection').style.display = 'block';
           return;
         } catch (e) {
           document.getElementById('kpis').innerHTML = '<div class="sub">Error loading: ' + esc(e.message || String(e)) + '</div>';
+          document.getElementById('needsAttentionCard').style.display = 'none';
+          document.getElementById('secondaryKpis').style.display = 'none';
           return;
         }
       }
       document.getElementById('kpis').innerHTML = '<div class="sub">Sign in to view overview.</div>';
       document.getElementById('chartSection').style.display = 'none';
+      var na = document.getElementById('needsAttentionCard');
+      if (na) na.style.display = 'none';
+      var sec = document.getElementById('secondaryKpis');
+      if (sec) { sec.innerHTML = ''; sec.style.display = 'none'; }
       var h = document.getElementById('overviewHintCard');
       if (h) h.style.display = 'none';
     }

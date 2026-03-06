@@ -22,7 +22,7 @@ from app.models.cancellation import Cancellation
 from app.services.email_service import queue_email, send_booking_confirmation_and_ticket
 from app.services.audit_service import log_audit
 from app.api.v1.routes.payments import _generate_ticket_for_booking
-from app.schemas.ops import TimeEntryIn, TimeEntryOut, SlotRuleIn, SlotRuleOut, SlotsFillRequest, SlotsFillResponse, CancellationRequestIn, CancellationDecisionIn, DashboardMetrics, DashboardSeriesPoint, WeeklyPlanImportRequest, WeeklyPlanImportResponse
+from app.schemas.ops import TimeEntryIn, TimeEntryOut, SlotRuleIn, SlotRuleOut, SlotsFillRequest, SlotsFillResponse, CancellationRequestIn, CancellationDecisionIn, DashboardMetrics, DashboardSeriesPoint, DashboardSummary, WeeklyPlanImportRequest, WeeklyPlanImportResponse
 from app.services.weekly_plan_service import import_weekly_plan, get_preset_legs, PRESETS
 from app.services.settings_service import get_usd_to_tzs_rate
 from app.services.partner_service import get_partner_by_code
@@ -846,6 +846,57 @@ def dashboard_metrics(
         seats_sold_total=int(seats_sold_total),
         bookings_by_day=series_bookings,
         revenue_by_day=series_revenue,
+    )
+
+
+@router.get("/ops/dashboard/summary", response_model=DashboardSummary)
+def dashboard_summary(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("ops", "admin", "superadmin", "finance")),
+):
+    """Revenue today, cancellations this week, partner bookings this month for overview dashboard."""
+    today = datetime.now(timezone.utc).date()
+    today_start = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
+    today_end = today_start + timedelta(days=1)
+    week_start = today_start - timedelta(days=7)
+    month_start = datetime(today.year, today.month, 1, tzinfo=timezone.utc)
+
+    paid_today = (
+        db.query(Booking.pax, TimeEntry.price_usd)
+        .join(TimeEntry, TimeEntry.id == Booking.time_entry_id)
+        .filter(
+            and_(Booking.created_at >= today_start, Booking.created_at < today_end),
+            Booking.payment_status == "paid",
+        )
+        .all()
+    )
+    revenue_today_usd = sum(int(p or 0) * int(pr or 0) for p, pr in paid_today)
+
+    cancellations_this_week = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.status.in_(["CANCELED", "REFUNDED"]),
+            Booking.created_at >= week_start,
+        )
+        .scalar()
+        or 0
+    )
+
+    partner_bookings_this_month = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.referral_code.isnot(None),
+            Booking.referral_code != "",
+            Booking.created_at >= month_start,
+        )
+        .scalar()
+        or 0
+    )
+
+    return DashboardSummary(
+        revenue_today_usd=int(revenue_today_usd),
+        cancellations_this_week=int(cancellations_this_week),
+        partner_bookings_this_month=int(partner_bookings_this_month),
     )
 
 

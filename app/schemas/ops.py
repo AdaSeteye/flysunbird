@@ -122,3 +122,10 @@ class DashboardMetrics(BaseModel):
     seats_sold_total: int
     bookings_by_day: List[DashboardSeriesPoint]
     revenue_by_day: List[DashboardSeriesPoint]
+
+
+class DashboardSummary(BaseModel):
+    """Extra overview numbers: revenue today, cancellations this week, partner bookings this month."""
+    revenue_today_usd: int = 0
+    cancellations_this_week: int = 0
+    partner_bookings_this_month: int = 0
