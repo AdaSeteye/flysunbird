@@ -22,7 +22,13 @@ from app.models.cancellation import Cancellation
 from app.services.email_service import queue_email, send_booking_confirmation_and_ticket
 from app.services.audit_service import log_audit
 from app.api.v1.routes.payments import _generate_ticket_for_booking
-from app.schemas.ops import TimeEntryIn, TimeEntryOut, SlotRuleIn, SlotRuleOut, SlotsFillRequest, SlotsFillResponse, CancellationRequestIn, CancellationDecisionIn, DashboardMetrics, DashboardSeriesPoint, DashboardSummary, WeeklyPlanImportRequest, WeeklyPlanImportResponse
+from app.schemas.ops import (
+    TimeEntryIn, TimeEntryOut, SlotRuleIn, SlotRuleOut, SlotsFillRequest, SlotsFillResponse,
+    CancellationRequestIn, CancellationDecisionIn, DashboardMetrics, DashboardSeriesPoint, DashboardSummary,
+    DashboardOverviewResponse, DashboardOverviewToday, DashboardOverviewSummary, DashboardOverviewTrends,
+    DashboardOverviewByStatus, DashboardOverviewRouteCount, DashboardOverviewAttention,
+    WeeklyPlanImportRequest, WeeklyPlanImportResponse,
+)
 from app.services.weekly_plan_service import import_weekly_plan, get_preset_legs, PRESETS
 from app.services.settings_service import get_usd_to_tzs_rate
 from app.services.partner_service import get_partner_by_code
@@ -894,6 +900,235 @@ def dashboard_summary(
         revenue_today_usd=int(revenue_today_usd),
         cancellations_this_week=int(cancellations_this_week),
         partner_bookings_this_month=int(partner_bookings_this_month),
+    )
+
+
+@router.get("/ops/dashboard/overview", response_model=DashboardOverviewResponse)
+def dashboard_overview(
+    days: int = 14,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_roles("ops", "admin", "superadmin", "finance")),
+):
+    """Single endpoint for Overview dashboard: today stats, summary, trends, by_status (pie), top_routes, attention, tickets, series."""
+    days = max(7, min(days, 90))
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    today_start = datetime(today.year, today.month, today.day, tzinfo=timezone.utc)
+    today_end = today_start + timedelta(days=1)
+    yesterday_start = today_start - timedelta(days=1)
+    yesterday_end = today_start
+    week_start = today_start - timedelta(days=7)
+    month_start = datetime(today.year, today.month, 1, tzinfo=timezone.utc)
+    range_30_start = today_start - timedelta(days=30)
+    older_than_24h = now - timedelta(hours=24)
+
+    today_str = today.isoformat()
+    entries_today = db.query(TimeEntry).filter(TimeEntry.date_str == today_str).all()
+    filled_slots_today = len(entries_today)
+    seats_available_today = sum(int(getattr(e, "seats_available", 0) or 0) for e in entries_today)
+
+    bookings_today = db.query(func.count(Booking.id)).filter(
+        Booking.created_at >= today_start, Booking.created_at < today_end
+    ).scalar() or 0
+    bookings_yesterday = db.query(func.count(Booking.id)).filter(
+        Booking.created_at >= yesterday_start, Booking.created_at < yesterday_end
+    ).scalar() or 0
+
+    paid_today_rows = (
+        db.query(Booking.pax, TimeEntry.price_usd)
+        .join(TimeEntry, TimeEntry.id == Booking.time_entry_id)
+        .filter(
+            and_(Booking.created_at >= today_start, Booking.created_at < today_end),
+            Booking.payment_status == "paid",
+        )
+        .all()
+    )
+    revenue_today_usd = sum(int(p or 0) * int(pr or 0) for p, pr in paid_today_rows)
+    seats_sold_today = sum(int(p or 0) for p, _ in paid_today_rows)
+
+    paid_yesterday_rows = (
+        db.query(Booking.pax, TimeEntry.price_usd)
+        .join(TimeEntry, TimeEntry.id == Booking.time_entry_id)
+        .filter(
+            and_(Booking.created_at >= yesterday_start, Booking.created_at < yesterday_end),
+            Booking.payment_status == "paid",
+        )
+        .all()
+    )
+    revenue_yesterday_usd = sum(int(p or 0) * int(pr or 0) for p, pr in paid_yesterday_rows)
+
+    revenue_this_week = (
+        db.query(Booking.pax, TimeEntry.price_usd)
+        .join(TimeEntry, TimeEntry.id == Booking.time_entry_id)
+        .filter(
+            Booking.created_at >= week_start,
+            Booking.payment_status == "paid",
+        )
+        .all()
+    )
+    revenue_this_week_usd = sum(int(p or 0) * int(pr or 0) for p, pr in revenue_this_week)
+
+    revenue_this_month = (
+        db.query(Booking.pax, TimeEntry.price_usd)
+        .join(TimeEntry, TimeEntry.id == Booking.time_entry_id)
+        .filter(
+            Booking.created_at >= month_start,
+            Booking.payment_status == "paid",
+        )
+        .all()
+    )
+    revenue_this_month_usd = sum(int(p or 0) * int(pr or 0) for p, pr in revenue_this_month)
+
+    cancellations_this_week = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.status.in_(["CANCELED", "REFUNDED"]),
+            Booking.created_at >= week_start,
+        )
+        .scalar()
+        or 0
+    )
+    partner_bookings_this_month = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.referral_code.isnot(None),
+            Booking.referral_code != "",
+            Booking.created_at >= month_start,
+        )
+        .scalar()
+        or 0
+    )
+
+    rev_pct = None
+    if revenue_yesterday_usd and revenue_today_usd is not None:
+        rev_pct = round((revenue_today_usd - revenue_yesterday_usd) / revenue_yesterday_usd * 100, 1)
+    elif revenue_yesterday_usd == 0 and revenue_today_usd:
+        rev_pct = 100.0
+    book_pct = None
+    if bookings_yesterday is not None and bookings_today is not None:
+        if bookings_yesterday:
+            book_pct = round((bookings_today - bookings_yesterday) / bookings_yesterday * 100, 1)
+        elif bookings_today:
+            book_pct = 100.0
+
+    paid_30 = (
+        db.query(func.count(Booking.id))
+        .filter(Booking.created_at >= range_30_start, Booking.payment_status == "paid")
+        .scalar()
+        or 0
+    )
+    cancelled_30 = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.created_at >= range_30_start,
+            (Booking.status.in_(["CANCELED", "REFUNDED"]) | (Booking.payment_status == "refunded")),
+        )
+        .scalar()
+        or 0
+    )
+    pending_30 = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.created_at >= range_30_start,
+            Booking.payment_status != "paid",
+            ~Booking.status.in_(["CANCELED", "REFUNDED"]),
+        )
+        .scalar()
+        or 0
+    )
+
+    route_counts = (
+        db.query(Route.from_label, Route.to_label, func.count(Booking.id))
+        .join(TimeEntry, TimeEntry.id == Booking.time_entry_id)
+        .join(Route, Route.id == TimeEntry.route_id)
+        .filter(Booking.created_at >= range_30_start)
+        .group_by(Route.from_label, Route.to_label)
+        .order_by(func.count(Booking.id).desc())
+        .limit(10)
+        .all()
+    )
+    top_routes = [
+        DashboardOverviewRouteCount(label=f"{fr or ''} → {to or ''}".strip(), count=int(c))
+        for fr, to, c in route_counts
+    ]
+
+    pending_count = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.payment_status != "paid",
+            ~Booking.status.in_(["CANCELED", "REFUNDED", "EXPIRED"]),
+        )
+        .scalar()
+        or 0
+    )
+    pending_older_than_24h = (
+        db.query(func.count(Booking.id))
+        .filter(
+            Booking.payment_status != "paid",
+            ~Booking.status.in_(["CANCELED", "REFUNDED", "EXPIRED"]),
+            Booking.created_at < older_than_24h,
+        )
+        .scalar()
+        or 0
+    )
+
+    tickets_generated_count = (
+        db.query(func.count(Booking.id)).filter(Booking.ticket_status == "generated").scalar() or 0
+    )
+
+    series_start = today - timedelta(days=days - 1)
+    series_bookings = []
+    series_revenue = []
+    for i in range(days):
+        d = series_start + timedelta(days=i)
+        d0 = datetime(d.year, d.month, d.day, tzinfo=timezone.utc)
+        d1 = d0 + timedelta(days=1)
+        bcount = (
+            db.query(func.count(Booking.id))
+            .filter(and_(Booking.created_at >= d0, Booking.created_at < d1))
+            .scalar()
+            or 0
+        )
+        paid_day = (
+            db.query(Booking.pax, TimeEntry.price_usd)
+            .join(TimeEntry, TimeEntry.id == Booking.time_entry_id)
+            .filter(
+                and_(Booking.created_at >= d0, Booking.created_at < d1),
+                Booking.payment_status == "paid",
+            )
+            .all()
+        )
+        rev = sum(int(p or 0) * int(pr or 0) for p, pr in paid_day)
+        series_bookings.append(DashboardSeriesPoint(date=d.isoformat(), value=int(bcount)))
+        series_revenue.append(DashboardSeriesPoint(date=d.isoformat(), value=int(rev)))
+
+    return DashboardOverviewResponse(
+        today=DashboardOverviewToday(
+            filled_slots_today=int(filled_slots_today),
+            seats_available_today=int(seats_available_today),
+            bookings_today=int(bookings_today),
+            revenue_today_usd=int(revenue_today_usd),
+            seats_sold_today=int(seats_sold_today),
+        ),
+        summary=DashboardOverviewSummary(
+            revenue_this_week_usd=int(revenue_this_week_usd),
+            revenue_this_month_usd=int(revenue_this_month_usd),
+            cancellations_this_week=int(cancellations_this_week),
+            partner_bookings_this_month=int(partner_bookings_this_month),
+        ),
+        trends=DashboardOverviewTrends(
+            revenue_today_vs_yesterday_pct=rev_pct,
+            bookings_today_vs_yesterday_pct=book_pct,
+        ),
+        by_status=DashboardOverviewByStatus(paid=int(paid_30), pending=int(pending_30), cancelled=int(cancelled_30)),
+        top_routes=top_routes,
+        attention=DashboardOverviewAttention(
+            pending_count=int(pending_count),
+            pending_older_than_24h_count=int(pending_older_than_24h),
+        ),
+        tickets_generated_count=int(tickets_generated_count),
+        bookings_by_day=series_bookings,
+        revenue_by_day=series_revenue,
     )
 
 

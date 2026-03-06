@@ -129,3 +129,53 @@ class DashboardSummary(BaseModel):
     revenue_today_usd: int = 0
     cancellations_this_week: int = 0
     partner_bookings_this_month: int = 0
+
+
+class DashboardOverviewToday(BaseModel):
+    filled_slots_today: int = 0
+    seats_available_today: int = 0
+    bookings_today: int = 0
+    revenue_today_usd: int = 0
+    seats_sold_today: int = 0
+
+
+class DashboardOverviewSummary(BaseModel):
+    revenue_this_week_usd: int = 0
+    revenue_this_month_usd: int = 0
+    cancellations_this_week: int = 0
+    partner_bookings_this_month: int = 0
+
+
+class DashboardOverviewTrends(BaseModel):
+    """Compared to yesterday. None if no yesterday data."""
+    revenue_today_vs_yesterday_pct: Optional[float] = None
+    bookings_today_vs_yesterday_pct: Optional[float] = None
+
+
+class DashboardOverviewByStatus(BaseModel):
+    """Bookings in last 30 days by status (for pie chart)."""
+    paid: int = 0
+    pending: int = 0
+    cancelled: int = 0
+
+
+class DashboardOverviewRouteCount(BaseModel):
+    label: str
+    count: int
+
+
+class DashboardOverviewAttention(BaseModel):
+    pending_count: int = 0
+    pending_older_than_24h_count: int = 0
+
+
+class DashboardOverviewResponse(BaseModel):
+    today: DashboardOverviewToday
+    summary: DashboardOverviewSummary
+    trends: DashboardOverviewTrends
+    by_status: DashboardOverviewByStatus
+    top_routes: List[DashboardOverviewRouteCount]
+    attention: DashboardOverviewAttention
+    tickets_generated_count: int = 0
+    bookings_by_day: List[DashboardSeriesPoint]
+    revenue_by_day: List[DashboardSeriesPoint]
