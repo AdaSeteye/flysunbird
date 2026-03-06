@@ -1,0 +1,137 @@
+<!doctype html>
+<html><head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <link rel="stylesheet" href="../admin_assets/module.css"/>
+</head>
+<body>
+<div class="wrap">
+  <div class="hrow">
+    <div>
+      <h1>Staff (Users)</h1>
+      <div class="sub">Add ops, admin, finance, or pilot. New users get a temporary password by email and must change it on first login.</div>
+    </div>
+    <div class="actions">
+      <button class="btn" type="button" data-label="Refresh" onclick="refreshWithFeedback(this)">Refresh</button>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div style="font-weight:900;margin-bottom:10px">Add user</div>
+    <div class="field-grid" style="grid-template-columns: 1fr 1fr auto auto auto;">
+      <div><label>Email</label><input id="newEmail" type="email" placeholder="user@flysunbird.co.tz" style="width:100%"/></div>
+      <div><label>Full name</label><input id="newFullName" type="text" placeholder="Optional" style="width:100%"/></div>
+      <div><label>Role</label><select id="newRole" style="width:100%"><option value="ops">ops</option><option value="admin">admin</option><option value="finance">finance</option><option value="pilot">pilot</option></select></div>
+      <div><label>Temp password (optional)</label><input id="newTempPassword" type="text" placeholder="Leave empty to auto-generate" style="width:100%"/></div>
+      <div style="align-self:end"><button class="btn primary" type="button" id="addUserBtn">Add user</button></div>
+    </div>
+    <div id="addMsg" class="sub" style="margin-top:8px;color:var(--muted)"></div>
+  </div>
+
+  <div class="card">
+    <div style="overflow:auto">
+      <table class="table">
+        <thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Active</th><th>Created</th><th>Actions</th></tr></thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="../admin_assets/ops_api.js"></script>
+<script>
+  if (window.parent === window && !localStorage.getItem("FSB_TOKEN") && !localStorage.getItem("FSB_API_BASE")) {
+    window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
+  }
+  const API_BASE = (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
+  const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
+
+  function token() { return localStorage.getItem("FSB_TOKEN") || ""; }
+  async function refreshToken() { return window.FSB_refreshToken ? await window.FSB_refreshToken() : false; }
+
+  async function fetchUsers(retried) {
+    if (!API_BASE) return { total: 0, items: [] };
+    var res = await fetch(API_BASE + "/admin/users?limit=200", { headers: { "Authorization": "Bearer " + token() } });
+    if (res.status === 401 && !retried && await refreshToken()) return fetchUsers(true);
+    if (!res.ok) throw new Error(await res.text().then(t => t).catch(() => "Failed"));
+    return await res.json();
+  }
+
+  async function refreshWithFeedback(btn) {
+    if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
+    try { await render(); } finally { if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || "Refresh"; } }
+  }
+
+  async function render() {
+    const tbody = document.getElementById("tbody");
+    try {
+      const data = await fetchUsers();
+      const items = data.items || [];
+      tbody.innerHTML = items.map(u => `
+        <tr>
+          <td><b>${esc(u.email || "—")}</b></td>
+          <td class="sub">${esc(u.fullName || "—")}</td>
+          <td><span class="badge ok">${esc(u.role || "—")}</span></td>
+          <td>${u.isActive !== false ? "Yes" : "No"}</td>
+          <td class="sub">${esc((u.createdAt || "").slice(0,10))}</td>
+          <td class="actions">
+            <button class="btn small" type="button" onclick="resetPw('${esc(u.id)}','${esc((u.email||"").replace(/'/g,"\\'"))}')">Reset password</button>
+          </td>
+        </tr>
+      `).join("") || "<tr><td colspan='6' class='sub'>No users</td></tr>";
+    } catch (e) {
+      tbody.innerHTML = "<tr><td colspan='6' class='sub'>Error: " + esc(e.message || String(e)) + "</td></tr>";
+    }
+  }
+
+  async function resetPw(userId, email) {
+    var pw = prompt("New temporary password (leave empty to auto-generate):");
+    if (pw === null) return;
+    var res = await fetch(API_BASE + "/admin/users/" + encodeURIComponent(userId) + "/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + token() },
+      body: JSON.stringify(pw !== "" ? { tempPassword: pw } : {})
+    });
+    if (res.status === 401 && await refreshToken()) return resetPw(userId, email);
+    var data = await res.json().catch(() => ({}));
+    if (!res.ok) { alert(data.detail || res.statusText || "Failed"); return; }
+    alert("Password reset. Temporary password: " + (data.tempPassword || "(sent by email)") + "\nUser must change it on next login.");
+    render();
+  }
+
+  document.getElementById("addUserBtn").addEventListener("click", async function() {
+    var email = (document.getElementById("newEmail").value || "").trim();
+    var fullName = (document.getElementById("newFullName").value || "").trim();
+    var role = (document.getElementById("newRole").value || "ops").trim();
+    var tempPassword = (document.getElementById("newTempPassword").value || "").trim() || undefined;
+    var msgEl = document.getElementById("addMsg");
+    var btn = document.getElementById("addUserBtn");
+    if (!email) { msgEl.textContent = "Enter email."; msgEl.style.color = "#f87171"; return; }
+    msgEl.textContent = "Adding…";
+    msgEl.style.color = "var(--muted)";
+    btn.disabled = true;
+    try {
+      var qs = "email=" + encodeURIComponent(email) + "&fullName=" + encodeURIComponent(fullName) + "&role=" + encodeURIComponent(role);
+      if (tempPassword) qs += "&tempPassword=" + encodeURIComponent(tempPassword);
+      var res = await fetch(API_BASE + "/admin/users?" + qs, {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + token() }
+      });
+      if (res.status === 401 && await refreshToken()) { btn.disabled = false; return document.getElementById("addUserBtn").click(); }
+      var data = await res.json().catch(() => ({}));
+      if (!res.ok) { msgEl.textContent = data.detail || res.statusText || "Failed"; msgEl.style.color = "#f87171"; btn.disabled = false; return; }
+      msgEl.textContent = "Added. Temp password: " + (data.tempPassword || "(sent by email)");
+      msgEl.style.color = "var(--success, #22c55e)";
+      document.getElementById("newEmail").value = "";
+      document.getElementById("newFullName").value = "";
+      document.getElementById("newTempPassword").value = "";
+      render();
+    } catch (e) {
+      msgEl.textContent = e.message || "Error";
+      msgEl.style.color = "#f87171";
+    }
+    btn.disabled = false;
+  });
+
+  render();
+</script>
+</body></html>

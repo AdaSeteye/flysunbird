@@ -245,6 +245,28 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         return out
 
     url = _extract_url(resp)
+    # If we have a URL from minimal but Selcom gateway often returns 404, try full create-order and use its URL (some vendors only serve full checkout).
+    if url:
+        try:
+            from app.services.selcom_service import create_checkout_order
+            client_base = (settings.CLIENT_BASE_URL or "").rstrip("/")
+            api_public = (settings.API_PUBLIC_URL or "").rstrip("/")
+            redirect_url = f"{client_base}/fly/confirmation.html?ref={b.booking_ref}" if client_base else None
+            cancel_url = f"{client_base}/fly/payment.html?bookingRef={b.booking_ref}" if client_base else None
+            webhook_url = f"{api_public}/api/v1/webhooks/selcom" if api_public else None
+            resp_full = create_checkout_order(
+                order_id=b.booking_ref, amount=amount_tzs, buyer_name=buyer_name,
+                buyer_email=buyer_email or "customer@flysunbird.co.tz",
+                buyer_phone=buyer_phone or "255000000000", currency="TZS",
+                redirect_url=redirect_url, cancel_url=cancel_url, webhook_url=webhook_url,
+            )
+            if resp_full.get("result") == "SUCCESS":
+                url_full = _extract_url(resp_full)
+                if url_full and url_full != url:
+                    url = url_full
+                    logger.info("[Selcom] using full create-order URL (may avoid gateway 404)")
+        except Exception as e:
+            logger.warning("[Selcom] full create-order (optional) failed: %s", e)
     if not url:
         try:
             from app.services.selcom_service import create_checkout_order

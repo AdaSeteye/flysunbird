@@ -58,6 +58,12 @@
 
         <div class="sep"></div>
 
+        <a class="nav-link" data-roles="admin,superadmin" href="#" onclick="openModule('./admin_modules/users.html', this); return false;">
+          <span>👥</span><span>Staff (Users)</span>
+        </a>
+
+        <div class="sep"></div>
+
         <details class="nav-details" data-roles="ops,admin,superadmin,finance">
           <summary class="nav-link"><span>🔗</span><span>Open client pages</span></summary>
           <a class="nav-link sub" href="./fly/booking.html" target="_blank"><span>👤</span><span>Client Booking</span></a>
@@ -69,6 +75,8 @@
 
       <div class="sb-foot">
         <div class="tiny">
+          <a href="change-password.html" style="color:var(--muted)">Change password</a>
+          <span style="color:var(--muted)"> · </span>
           <a href="login.html" style="color:var(--muted)">Sign out</a>
         </div>
       </div>
