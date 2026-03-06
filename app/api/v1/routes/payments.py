@@ -28,7 +28,7 @@ from app.services.ticket_service import (
     build_ticket_context,
 )
 from app.services.settings_service import get_usd_to_tzs_rate
-from app.schemas.payments import RefundRequest, StripeCreateCheckoutSessionRequest, SelcomCreateOrderRequest
+from app.schemas.payments import RefundRequest, StripeCreateCheckoutSessionRequest, SelcomCreateOrderRequest, _is_valid_tanzania_mobile, _normalize_tanzania_phone
 
 router = APIRouter(tags=["payments"])
 
@@ -134,7 +134,18 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         buyer_phone = ""
         if first_passenger:
             buyer_name = f"{(first_passenger.first or '').strip()} {(first_passenger.last or '').strip()}".strip()
-            buyer_phone = (first_passenger.phone or "").strip().replace(" ", "")
+            buyer_phone = (first_passenger.phone or "").strip()
+        if getattr(req, "buyerPhone", None) and str(req.buyerPhone or "").strip():
+            raw = str(req.buyerPhone or "").strip()
+            if not _is_valid_tanzania_mobile(raw):
+                raise HTTPException(status_code=400, detail="Invalid Tanzania mobile number. Please enter a valid number (e.g. 0712 345 678 or +255712345678). Random numbers are not accepted for mobile payments.")
+            buyer_phone = _normalize_tanzania_phone(raw)
+        elif buyer_phone:
+            if not _is_valid_tanzania_mobile(buyer_phone):
+                raise HTTPException(status_code=400, detail="Invalid Tanzania mobile number in booking. Please enter a valid mobile number (e.g. 0712 345 678) for mobile payments.")
+            buyer_phone = _normalize_tanzania_phone(buyer_phone)
+        if not buyer_phone:
+            raise HTTPException(status_code=400, detail="A valid Tanzania mobile number is required for Selcom payment. Enter it in the Customer phone field.")
         buyer_email = (getattr(b, "contact_email", None) or "").strip()
         if not buyer_email and b.user_id:
             booker = db.get(User, b.user_id)

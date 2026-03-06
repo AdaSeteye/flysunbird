@@ -114,6 +114,14 @@ function setMethod(method){
   state.paymentMethod = method; saveState(state);
   $$(".method").forEach(m=> m.classList.toggle("active", m.dataset.method === method));
   $$(".pay-form").forEach(f=> f.style.display = (f.dataset.method === method) ? "block" : "none");
+  if (method === "selcom") {
+    const phoneEl = document.getElementById("selcomPhone");
+    if (phoneEl && !phoneEl.value.trim()) {
+      const p0 = state.passengers && state.passengers[0] ? state.passengers[0] : {};
+      const p = (p0.phone || "").trim();
+      if (p) phoneEl.value = p;
+    }
+  }
 }
 
 $("#backPassengers").addEventListener("click", ()=> window.location.href = "passenger.html");
@@ -143,6 +151,23 @@ if(!state.bookingRef){
   saveState(state);
 }
 
+// Tanzania mobile: 9 digits after 255, first digit 6|7|8 (M-Pesa, Tigo, Airtel). Reject random/invalid.
+function isValidTanzaniaMobile(raw) {
+  if (!raw || typeof raw !== "string") return false;
+  const digits = raw.replace(/\D/g, "");
+  // 0712345678 (10) -> 712345678; 255712345678 (12); 712345678 (9)
+  const nine = digits.length === 10 && digits.startsWith("0") ? digits.slice(1) : digits.length === 9 ? digits : digits.length === 12 && digits.startsWith("255") ? digits.slice(3) : null;
+  if (!nine || nine.length !== 9) return false;
+  return /^[678]\d{8}$/.test(nine);
+}
+function normalizeTanzaniaPhone(raw) {
+  if (!raw || typeof raw !== "string") return "";
+  const digits = raw.replace(/\D/g, "");
+  const nine = digits.length === 10 && digits.startsWith("0") ? digits.slice(1) : digits.length === 9 ? digits : digits.length === 12 && digits.startsWith("255") ? digits.slice(3) : null;
+  if (!nine || nine.length !== 9 || !/^[678]\d{8}$/.test(nine)) return "";
+  return "255" + nine;
+}
+
 function validateRequired(method){
   const form = document.querySelector(`.pay-form[data-method="${method}"]`);
   if(!form) return { ok:true };
@@ -151,6 +176,14 @@ function validateRequired(method){
   if(missing.length){
     missing[0].focus();
     return { ok:false, msg:"Please fill all required payment fields." };
+  }
+  if (method === "selcom") {
+    const phoneEl = document.getElementById("selcomPhone");
+    const phone = (phoneEl && phoneEl.value || "").trim();
+    if (!isValidTanzaniaMobile(phone)) {
+      if (phoneEl) phoneEl.focus();
+      return { ok: false, msg: "Please enter a valid Tanzania mobile number (e.g. 0712 345 678 or +255712345678). Random numbers are not accepted for mobile payments." };
+    }
   }
   return { ok:true };
 }
@@ -211,10 +244,12 @@ $("#payNow").addEventListener("click", async ()=>{
         alert("API base not configured. Set FLYSUNBIRD_API_BASE.");
         return;
       }
+      const phoneEl = document.getElementById("selcomPhone");
+      const buyerPhone = (phoneEl && phoneEl.value) ? normalizeTanzaniaPhone(phoneEl.value) : "";
       const res = await fetch(API_BASE + "/public/payments/selcom/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingRef: state.bookingRef || "" })
+        body: JSON.stringify({ bookingRef: state.bookingRef || "", buyerPhone: buyerPhone || undefined })
       });
       const data = await res.json().catch(() => ({}));
       if(!res.ok){
