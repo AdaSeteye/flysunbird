@@ -30,16 +30,25 @@
     @media (max-width: 800px) { .charts-row { grid-template-columns: 1fr; } }
     .chart-panel { background: #fff; border: 1px solid #e5e8ec; border-radius: 16px; padding: 20px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
     .chart-panel h3 { margin: 0 0 16px; font-size: 15px; font-weight: 700; color: #212b36; }
-    .pie-wrap { width: 100%; max-width: 260px; margin: 0 auto; }
-    .pie-svg { width: 100%; height: auto; }
-    .line-chart-wrap { width: 100%; height: 240px; }
+    .pie-wrap { width: 100%; max-width: 260px; margin: 0 auto; aspect-ratio: 1; }
+    .pie-svg { display: block; width: 100%; height: auto; }
+    .pie-segment { cursor: pointer; transition: opacity 0.15s, filter 0.15s; }
+    .pie-segment:hover { opacity: 0.9; filter: brightness(1.1); }
+    .chart-tooltip { position: fixed; background: #212b36; color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 12px; pointer-events: none; z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.2); max-width: 200px; }
+    .line-chart-wrap { width: 100%; height: 240px; position: relative; }
     .line-chart-svg { width: 100%; height: 100%; }
+    .line-chart-hover-line { stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 4 2; pointer-events: none; }
+    .line-hover-zone { cursor: crosshair; }
+    .metrics-bars { max-height: 320px; overflow-y: auto; }
+    .metrics-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; font-size: 13px; cursor: default; padding: 6px 8px; border-radius: 8px; transition: background 0.15s; }
+    .metrics-bar-row:hover { background: #f1f5f9; }
+    .metrics-bar-label { width: 180px; flex-shrink: 0; color: #212b36; }
+    .metrics-bar-track { flex: 1; min-width: 0; height: 24px; background: #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .metrics-bar-fill { height: 100%; border-radius: 8px; min-width: 2px; transition: width 0.2s; }
+    .metrics-bar-value { width: 64px; text-align: right; flex-shrink: 0; font-weight: 700; color: #212b36; }
     .legend-row { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: #637381; }
     .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 6px; vertical-align: middle; }
-    .secondary-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-bottom: 20px; }
-    .secondary-card { background: #fff; border: 1px solid #e5e8ec; border-radius: 12px; padding: 14px; box-shadow: 0 2px 8px rgba(0,0,0,0.04); }
-    .secondary-card .label { font-size: 11px; color: #637381; text-transform: uppercase; letter-spacing: 0.3px; }
-    .secondary-card .value { font-size: 18px; font-weight: 800; color: #212b36; margin-top: 4px; }
+    .secondary-section .chart-panel { margin-bottom: 20px; }
     .attention-banner { background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border: 1px solid rgba(245,158,11,0.4); border-radius: 12px; padding: 14px 18px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
     .attention-banner .text { font-size: 14px; color: #92400e; font-weight: 600; }
     .top-routes-list { font-size: 13px; }
@@ -76,9 +85,11 @@
       </div>
     </div>
 
-    <div id="secondarySection" style="display:none">
-      <h3 style="margin:0 0 12px;font-size:15px;font-weight:700;color:#212b36">More metrics</h3>
-      <div class="secondary-grid" id="secondaryGrid"></div>
+    <div id="secondarySection" class="secondary-section" style="display:none">
+      <div class="chart-panel">
+        <h3>More metrics</h3>
+        <div class="metrics-bars" id="metricsBarChart"></div>
+      </div>
       <div class="chart-panel" id="topRoutesPanel" style="display:none">
         <h3>Top routes (last 30 days)</h3>
         <div class="top-routes-list" id="topRoutesList"></div>
@@ -91,6 +102,7 @@
 
     <div id="signInHint" style="display:none" class="sub">Sign in to load.</div>
   </div>
+  <div id="chartTooltip" class="chart-tooltip" style="display:none"></div>
 
   <script src="../admin_assets/ops_api.js"></script>
   <script src="../admin_assets/ops_inventory.js"></script>
@@ -119,6 +131,24 @@
         return "<span class=\"kpi-trend\">" + sign + pct + "% vs yesterday</span>";
       }
 
+      function arcPath(cx, cy, r, startRad, endRad) {
+        var x1 = cx + r * Math.cos(startRad); var y1 = cy + r * Math.sin(startRad);
+        var x2 = cx + r * Math.cos(endRad);   var y2 = cy + r * Math.sin(endRad);
+        var large = (endRad - startRad) > Math.PI ? 1 : 0;
+        return "M " + cx + " " + cy + " L " + x1 + " " + y1 + " A " + r + " " + r + " 0 " + large + " 1 " + x2 + " " + y2 + " Z";
+      }
+      function showTooltip(text, ev) {
+        var tip = document.getElementById("chartTooltip");
+        if (!tip) return;
+        tip.textContent = text;
+        tip.style.display = "block";
+        tip.style.left = (ev.clientX + 14) + "px";
+        tip.style.top = (ev.clientY + 10) + "px";
+      }
+      function hideTooltip() {
+        var tip = document.getElementById("chartTooltip");
+        if (tip) tip.style.display = "none";
+      }
       function renderPie(byStatus) {
         var paid = byStatus.paid || 0, pending = byStatus.pending || 0, cancelled = byStatus.cancelled || 0;
         var total = paid + pending + cancelled;
@@ -130,23 +160,51 @@
           legendEl.innerHTML = "";
           return;
         }
-        var r = 50; var cx = 60; var cy = 60;
-        var p1 = (paid / total) * 100; var p2 = (pending / total) * 100; var p3 = (cancelled / total) * 100;
-        var dash1 = (p1 / 100) * 2 * Math.PI * r; var dash2 = (p2 / 100) * 2 * Math.PI * r; var dash3 = (p3 / 100) * 2 * Math.PI * r;
-        var circ = 2 * Math.PI * r;
-        var segments = [
-          { d: dash1, color: "#2563eb", label: "Paid", count: paid },
-          { d: dash2, color: "#f59e0b", label: "Pending", count: pending },
-          { d: dash3, color: "#64748b", label: "Cancelled", count: cancelled }
+        var r = 48; var cx = 60; var cy = 60;
+        var start = -Math.PI / 2;
+        var segs = [
+          { frac: paid / total, color: "#2563eb", label: "Paid", count: paid },
+          { frac: pending / total, color: "#f59e0b", label: "Pending", count: pending },
+          { frac: cancelled / total, color: "#64748b", label: "Cancelled", count: cancelled }
         ];
-        var running = 0;
-        var circles = segments.map(function(s) {
-          var off = -running;
-          running += s.d;
-          return "<circle cx=\"" + cx + "\" cy=\"" + cy + "\" r=\"" + r + "\" fill=\"none\" stroke=\"" + s.color + "\" stroke-width=\"" + (r * 2) + "\" stroke-dasharray=\"" + s.d + " " + (circ - s.d) + "\" stroke-dashoffset=\"" + off + "\" transform=\"rotate(-90 " + cx + " " + cy + ")\"/>";
+        var paths = [];
+        segs.forEach(function(s) {
+          if (s.frac <= 0) return;
+          var end = start + s.frac * 2 * Math.PI;
+          var d = arcPath(cx, cy, r, start, end);
+          paths.push("<path class=\"pie-segment\" fill=\"" + s.color + "\" d=\"" + d + "\" data-label=\"" + esc(s.label) + "\" data-count=\"" + s.count + "\"/>");
+          start = end;
+        });
+        wrap.innerHTML = "<svg class=\"pie-svg\" viewBox=\"0 0 120 120\" xmlns=\"http://www.w3.org/2000/svg\">" + paths.join("") + "</svg>";
+        wrap.querySelectorAll(".pie-segment").forEach(function(el) {
+          el.addEventListener("mouseenter", function(e) { showTooltip(el.dataset.label + ": " + el.dataset.count, e); });
+          el.addEventListener("mousemove", function(e) { showTooltip(el.dataset.label + ": " + el.dataset.count, e); });
+          el.addEventListener("mouseleave", hideTooltip);
+        });
+        legendEl.innerHTML = segs.map(function(s) { return "<span><span class=\"legend-dot\" style=\"background:" + s.color + "\"></span> " + esc(s.label) + " (" + s.count + ")</span>"; }).join("");
+      }
+
+      function renderMetricsBars(rows) {
+        var container = document.getElementById("metricsBarChart");
+        if (!container) return;
+        var maxVal = Math.max(1, Math.max.apply(null, rows.map(function(r) { return Number(r.value) || 0; })));
+        var colors = ["#2563eb", "#7c3aed", "#16a34a", "#ea580c", "#dc2626", "#0891b2", "#4f46e5", "#65a30d"];
+        var html = rows.map(function(r, i) {
+          var v = Number(r.value) || 0;
+          var pct = maxVal ? Math.round((v / maxVal) * 100) : 0;
+          var color = colors[i % colors.length];
+          var title = r.label + ": " + (r.fmt ? r.fmt(v) : v);
+          return "<div class=\"metrics-bar-row\" title=\"" + esc(title) + "\" data-label=\"" + esc(r.label) + "\" data-value=\"" + v + "\" data-fmt=\"" + esc(r.fmt ? r.fmt(v) : v) + "\">" +
+            "<span class=\"metrics-bar-label\">" + esc(r.label) + "</span>" +
+            "<div class=\"metrics-bar-track\"><div class=\"metrics-bar-fill\" style=\"width:" + pct + "%;background:" + color + "\"></div></div>" +
+            "<span class=\"metrics-bar-value\">" + (r.fmt ? r.fmt(v) : v) + "</span></div>";
         }).join("");
-        wrap.innerHTML = "<svg class=\"pie-svg\" viewBox=\"0 0 120 120\" xmlns=\"http://www.w3.org/2000/svg\">" + circles + "</svg>";
-        legendEl.innerHTML = segments.map(function(s) { return "<span><span class=\"legend-dot\" style=\"background:" + s.color + "\"></span> " + esc(s.label) + " (" + s.count + ")</span>"; }).join("");
+        container.innerHTML = html;
+        container.querySelectorAll(".metrics-bar-row").forEach(function(el) {
+          el.addEventListener("mouseenter", function(e) { showTooltip(el.dataset.label + ": " + el.dataset.fmt, e); });
+          el.addEventListener("mousemove", function(e) { showTooltip(el.dataset.label + ": " + el.dataset.fmt, e); });
+          el.addEventListener("mouseleave", hideTooltip);
+        });
       }
 
       function renderLineChart(bookingsByDay, revenueByDay) {
@@ -165,17 +223,30 @@
         var xs = points.map(function(_, i) { return pad.left + (i / Math.max(1, points.length - 1)) * innerW; });
         function yB(v) { return pad.top + innerH - (v / maxB) * innerH; }
         function yR(v) { return pad.top + innerH - (v / maxR) * innerH; }
-        var pathB = points.map(function(p, i) { return (i === 0 ? "M" : "L") + xs[i] + "," + yB(p.value || 0); }).join(" ");
-        var pathR = revPoints.map(function(p, i) { return (i === 0 ? "M" : "L") + xs[i] + "," + yR(p.value || 0); }).join(" ");
-        var ticks = points.map(function(p) { return (p.date || "").slice(5); });
-        var tickEls = ticks.map(function(t, i) {
+        var tickEls = points.map(function(p, i) {
           var x = xs[i];
-          return "<text x=\"" + x + "\" y=\"" + (h - 6) + "\" font-size=\"10\" fill=\"#637381\" text-anchor=\"middle\">" + esc(t) + "</text>";
+          return "<text x=\"" + x + "\" y=\"" + (h - 6) + "\" font-size=\"10\" fill=\"#637381\" text-anchor=\"middle\">" + esc((p.date || "").slice(5)) + "</text>";
+        }).join("");
+        var rectW = Math.max(8, innerW / points.length - 2);
+        var hoverRects = points.map(function(p, i) {
+          var x = xs[i] - rectW / 2; var rev = (revPoints[i] && revPoints[i].value) || 0;
+          return "<rect class=\"line-hover-zone\" fill=\"transparent\" x=\"" + x + "\" y=\"" + pad.top + "\" width=\"" + rectW + "\" height=\"" + innerH + "\" data-date=\"" + esc(p.date || "") + "\" data-bookings=\"" + (p.value || 0) + "\" data-revenue=\"" + rev + "\" data-x=\"" + xs[i] + "\"/>";
         }).join("");
         wrap.innerHTML = "<svg class=\"line-chart-svg\" viewBox=\"0 0 " + w + " " + h + "\">" +
           "<polyline fill=\"none\" stroke=\"#2563eb\" stroke-width=\"2\" points=\"" + points.map(function(p, i) { return xs[i] + "," + yB(p.value || 0); }).join(" ") + "\"/>" +
           "<polyline fill=\"none\" stroke=\"#16a34a\" stroke-width=\"2\" stroke-dasharray=\"4 2\" points=\"" + revPoints.map(function(p, i) { return xs[i] + "," + yR(p.value || 0); }).join(" ") + "\"/>" +
-          tickEls + "</svg>";
+          "<line id=\"lineChartHoverLine\" class=\"line-chart-hover-line\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"0\" style=\"visibility:hidden\"/>" +
+          hoverRects + tickEls + "</svg>";
+        wrap.querySelectorAll(".line-hover-zone").forEach(function(el) {
+          var show = function(e) {
+            showTooltip(el.dataset.date + " — Bookings: " + el.dataset.bookings + ", Revenue: $" + el.dataset.revenue, e);
+            var line = document.getElementById("lineChartHoverLine");
+            if (line) { line.setAttribute("x1", el.dataset.x); line.setAttribute("x2", el.dataset.x); line.setAttribute("y1", pad.top); line.setAttribute("y2", h - pad.bottom); line.style.visibility = "visible"; }
+          };
+          el.addEventListener("mouseenter", show);
+          el.addEventListener("mousemove", show);
+          el.addEventListener("mouseleave", function() { hideTooltip(); var line = document.getElementById("lineChartHoverLine"); if (line) line.style.visibility = "hidden"; });
+        });
       }
 
       function render(data) {
@@ -234,16 +305,17 @@
             chartsRow.style.display = "grid";
 
             var sec = d.summary || {};
-            var gridHtml =
-              "<div class=\"secondary-card\"><div class=\"label\">Seats available (today)</div><div class=\"value\">" + esc(t.seats_available_today) + "</div></div>" +
-              "<div class=\"secondary-card\"><div class=\"label\">Seats sold (today)</div><div class=\"value\">" + esc(t.seats_sold_today) + "</div></div>" +
-              "<div class=\"secondary-card\"><div class=\"label\">Revenue (this week USD)</div><div class=\"value\">$" + esc(sec.revenue_this_week_usd) + "</div></div>" +
-              "<div class=\"secondary-card\"><div class=\"label\">Revenue (this month USD)</div><div class=\"value\">$" + esc(sec.revenue_this_month_usd) + "</div></div>" +
-              "<div class=\"secondary-card\"><div class=\"label\">Cancellations (this week)</div><div class=\"value\">" + esc(sec.cancellations_this_week) + "</div></div>" +
-              "<div class=\"secondary-card\"><div class=\"label\">Partner bookings (this month)</div><div class=\"value\">" + esc(sec.partner_bookings_this_month) + "</div></div>" +
-              "<div class=\"secondary-card\"><div class=\"label\">Tickets generated</div><div class=\"value\">" + esc(d.tickets_generated_count || 0) + "</div></div>" +
-              "<div class=\"secondary-card\"><div class=\"label\">Pending &gt; 24h</div><div class=\"value\">" + esc(att.pending_older_than_24h_count || 0) + "</div></div>";
-            document.getElementById("secondaryGrid").innerHTML = gridHtml;
+            var metricsRows = [
+              { label: "Seats available (today)", value: t.seats_available_today, fmt: function(v) { return v; } },
+              { label: "Seats sold (today)", value: t.seats_sold_today, fmt: function(v) { return v; } },
+              { label: "Revenue (this week USD)", value: sec.revenue_this_week_usd || 0, fmt: function(v) { return "$" + v; } },
+              { label: "Revenue (this month USD)", value: sec.revenue_this_month_usd || 0, fmt: function(v) { return "$" + v; } },
+              { label: "Cancellations (this week)", value: sec.cancellations_this_week || 0, fmt: function(v) { return v; } },
+              { label: "Partner bookings (this month)", value: sec.partner_bookings_this_month || 0, fmt: function(v) { return v; } },
+              { label: "Tickets generated", value: d.tickets_generated_count || 0, fmt: function(v) { return v; } },
+              { label: "Pending > 24h", value: att.pending_older_than_24h_count || 0, fmt: function(v) { return v; } }
+            ];
+            renderMetricsBars(metricsRows);
             secondarySection.style.display = "block";
 
             var routes = d.top_routes || [];
