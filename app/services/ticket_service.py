@@ -211,9 +211,8 @@ def _make_qr_image_bytes(url: str, box_size: int = 3, border: int = 2) -> bytes:
 
 
 def _footer2_experience(k: dict) -> str:
-    """Format footer line 2 exactly as standard: 'Route → To • Seats: N • Type duration min'. Use → (not dot) between from/to."""
-    arrow = "\u2192"  # explicit rightward arrow so it never renders as dot
-    route = f"{k.get('route_from') or ''} {arrow} {k.get('route_to') or ''}".strip()
+    """Format footer line 2: 'Route -> To • Seats: N • Type duration min'. Use ASCII -> so it never renders as dot."""
+    route = f"{k.get('route_from') or ''} -> {k.get('route_to') or ''}".strip()
     pax = k.get("pax") or 0
     exp = (k.get("experience") or "").strip()
     # Standard shows e.g. "Scenic 30 min" — extract "N Minutes Type." -> "Type N min"
@@ -316,8 +315,8 @@ _TEMPLATE_FIELDS = [
     # Amount: single number as on standard (e.g. "500")
     ("amount", (380.8, 347.6, 400.0, 358.6), lambda k: str(k.get("amount_usd") or k.get("amount_tzs") or 0)),
 ]
-# Footer: one band to erase both placeholder lines (extend to fully remove "Zanzibar Stone Town → Nungwi • Seats: 2 • Scenic 30 min")
-_FOOTER_ERASE_RECT = (88, 534, 568, 596)
+# Footer: full-width band to erase both placeholder lines; extend well down so "Zanzibar Stone Town → Nungwi • Seats: 2 • Scenic 30 min" is gone
+_FOOTER_ERASE_RECT = (0, 532, 612, 602)
 _FOOTER_LINE1_BASELINE_Y = 556   # first line: booking_ref • passenger • date • time
 _FOOTER_LINE2_BASELINE_Y = 571   # second line: route • Seats • experience
 _FOOTER_X = 102.6
@@ -383,15 +382,16 @@ def _render_ticket_pdf_from_template(
         shape.finish(fill=(1, 1, 1), color=(1, 1, 1))
         shape.commit()
         page.insert_text((x0, y1 - 2), str(val)[:80], fontsize=10, fontname="helv", rotate=rot)
-    # Footer: one white rect to fully erase both placeholder lines, then draw new footer1 and footer2 at correct baselines
+    # Footer: full-width white rect(s) to fully erase both placeholder lines, then draw new footer1 and footer2
     footer_rect = fitz.Rect(
         max(0, _FOOTER_ERASE_RECT[0]), max(0, _FOOTER_ERASE_RECT[1]),
         min(page.rect.width, _FOOTER_ERASE_RECT[2]), min(page.rect.height, _FOOTER_ERASE_RECT[3]),
     )
-    shape = page.new_shape()
-    shape.draw_rect(footer_rect)
-    shape.finish(fill=(1, 1, 1), color=(1, 1, 1))
-    shape.commit()
+    for _ in range(2):  # draw twice so placeholder is fully covered
+        shape = page.new_shape()
+        shape.draw_rect(footer_rect)
+        shape.finish(fill=(1, 1, 1), color=(1, 1, 1))
+        shape.commit()
     footer1_val = f"{ctx['booking_ref']} • {(ctx.get('passenger_name') or 'Passenger')[:20]} • {ctx['date_str']} • {(ctx.get('start_time') or '').strip() or '—'}"[:70]
     footer2_val = _footer2_experience(ctx)
     page.insert_text((_FOOTER_X, _FOOTER_LINE1_BASELINE_Y), footer1_val[:80], fontsize=10, fontname="helv", rotate=rot)
