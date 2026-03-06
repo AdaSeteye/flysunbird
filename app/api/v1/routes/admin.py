@@ -20,12 +20,17 @@ from app.services.email_service import queue_email
 
 router = APIRouter(tags=["admin"])
 
+STAFF_ROLES = ("admin", "superadmin", "ops", "finance", "pilot")
+
 @router.get("/admin/users")
 def list_users(role: str | None = None, q: str | None = None, limit: int = 50, offset: int = 0,
                db: Session = Depends(get_db),
                me: User = Depends(require_roles("admin","superadmin"))):
-    query = db.query(User)
+    """List only staff users; customers are excluded."""
+    query = db.query(User).filter(User.role.in_(STAFF_ROLES))
     if role:
+        if role not in STAFF_ROLES:
+            return {"total": 0, "items": []}
         query = query.filter(User.role == role)
     if q:
         ql = f"%{q.lower()}%"
@@ -75,7 +80,7 @@ def update_user(user_id: str, fullName: str | None = None, role: str | None = No
     if fullName is not None:
         u.full_name = fullName
     if role is not None:
-        if role not in ("customer", "ops", "admin", "finance", "pilot"):
+        if role not in STAFF_ROLES:
             raise HTTPException(status_code=400, detail="invalid role")
         u.role = role
     if isActive is not None:

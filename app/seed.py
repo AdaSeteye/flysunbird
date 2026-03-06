@@ -25,8 +25,10 @@ def ensure_bootstrap_admin(db: Session) -> None:
         bootstrap = next((u for u in existing if (u.email or "").lower() == email), None)
         if bootstrap and (isinstance(raw_password, str) and raw_password.strip()):
             bootstrap.password_hash = hash_password(password)
+            bootstrap.must_change_password = False  # admin can keep using .env password until they change it
             db.commit()
         return
+    # First run: create bootstrap admin; no forced password change so they can keep using .env password
     db.add(
         User(
             id=str(uuid.uuid4()),
@@ -35,7 +37,7 @@ def ensure_bootstrap_admin(db: Session) -> None:
             role="admin",
             password_hash=hash_password(password),
             is_active=True,
-            must_change_password=True,
+            must_change_password=False,
         )
     )
     db.commit()

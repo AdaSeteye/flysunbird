@@ -7,8 +7,7 @@
 <div class="wrap">
   <div class="hrow">
     <div>
-      <h1>Payment &amp; Ticket configuration</h1>
-      <div class="sub">Selcom and ticket storage are set in the backend <code>.env</code>. This page shows status.</div>
+      <h1>Payment &amp; Ticket config</h1>
     </div>
     <div class="actions">
       <button class="btn" onclick="loadStatus()">Refresh status</button>
@@ -17,14 +16,12 @@
 
   <div class="card" id="statusCard">
     <div style="font-weight:900">Backend status</div>
-    <div class="sub">Fetched from GET /ops/settings/payment-status (no secrets).</div>
     <div class="hr"></div>
     <div id="statusContent">Loading…</div>
   </div>
 
   <div class="card">
-    <div style="font-weight:900">Ticket storage (backend .env)</div>
-    <div class="sub">PDFs are generated after payment and stored locally or in GCS.</div>
+    <div style="font-weight:900">Ticket storage</div>
     <div class="hr"></div>
     <pre class="k" style="overflow:auto;font-size:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:12px;margin:0;"># Local directory (default)
 TICKET_LOCAL_DIR=./data/tickets
@@ -36,15 +33,13 @@ GOOGLE_APPLICATION_CREDENTIALS=</pre>
 
   <div class="card">
     <div style="font-weight:900">Client base URL</div>
-    <div class="sub">Used for payment links and customer-facing URLs (e.g. confirmation, ticket).</div>
     <div class="hr"></div>
     <pre class="k" style="overflow:auto;font-size:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:12px;margin:0;"># Where the booking/payment UI is hosted
 CLIENT_BASE_URL=http://localhost:8080</pre>
   </div>
 
   <div class="card">
-    <div style="font-weight:900">API public URL (ticket QR code)</div>
-    <div class="sub">When a ticket PDF is generated, its QR code encodes a URL. Scanning it opens the PDF. Set this to your backend API base (e.g. https://api.flysunbird.co.tz).</div>
+    <div style="font-weight:900">API public URL (ticket QR)</div>
     <div class="hr"></div>
     <pre class="k" style="overflow:auto;font-size:12px;padding:12px;background:rgba(0,0,0,0.2);border-radius:12px;margin:0;"># Backend API base – QR scan will open /api/v1/public/bookings/{ref}/ticket
 API_PUBLIC_URL=http://localhost:8000</pre>
@@ -65,12 +60,12 @@ API_PUBLIC_URL=http://localhost:8000</pre>
   async function loadStatus(){
     var el = document.getElementById("statusContent");
     if (!API_BASE) {
-      el.innerHTML = "<span class='sub'>Sign in and set API base to see status.</span>";
+      el.innerHTML = "<span class='sub'>Sign in to load.</span>";
       return;
     }
     var token = localStorage.getItem("FSB_TOKEN") || "";
     if (!token) {
-      el.innerHTML = "<span class='sub'>Sign in to see status.</span>";
+      el.innerHTML = "<span class='sub'>Sign in to load.</span>";
       return;
     }
     try {

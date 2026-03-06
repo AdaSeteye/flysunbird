@@ -472,7 +472,7 @@ def resend_ticket(
         )
         if pdf:
             attachments.append((f"{b.booking_ref}.pdf", pdf, "application/pdf"))
-    queue_email(
+    _eid, sent = queue_email(
         db,
         booker.email,
         subject,
@@ -483,6 +483,11 @@ def resend_ticket(
     )
     log_audit(db, user.id, "ticket.resend", "booking", b.id, {"booking_ref": booking_ref, "reason": body.reason})
     db.commit()
+    if not sent:
+        raise HTTPException(
+            status_code=502,
+            detail="Ticket was queued but the email could not be sent. Check SMTP or SendGrid configuration (see .env and email_logs table).",
+        )
     return {"ok": True, "sentTo": booker.email, "attachment": bool(attachments)}
 
 
@@ -501,22 +506,14 @@ def dashboard_today_stats(
     db: Session = Depends(get_db),
     user: User = Depends(require_roles("ops","admin","superadmin","finance")),
 ):
-    """Count slots and seats for today from slot rules (same logic as booking calendar: weekday → rules → flights per day, capacity per flight)."""
+    """Count slots and seats for today from actual time entries (filled slots). Matches Inventory (Ops) for today."""
     today = datetime.now(timezone.utc).date()
     today_str = today.isoformat()
     weekday = today.weekday()  # 0=Mon .. 6=Sun
-    rules = db.query(SlotRule).filter(SlotRule.active == True).all()
-    inventory_slots = 0
-    seats_available = 0
-    for r in rules:
-        days = {int(x) for x in (r.days_of_week or "").split(",") if x.strip().isdigit()}
-        if weekday not in days:
-            continue
-        times = [t.strip() for t in (r.times or "").split(",") if t.strip()]
-        n = len(times)
-        cap = int(r.capacity or 0)
-        inventory_slots += n
-        seats_available += n * cap
+    # Use filled time entries for today so Overview matches Inventory (Ops)
+    entries = db.query(TimeEntry).filter(TimeEntry.date_str == today_str).all()
+    inventory_slots = len(entries)
+    seats_available = sum(int(getattr(e, "seats_available", 0) or 0) for e in entries)
     return OverviewTodayStats(
         dateStr=today_str,
         weekday=weekday,

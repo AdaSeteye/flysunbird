@@ -37,6 +37,7 @@ def queue_email(
     )
     db.commit()
 
+    sent = False
     try:
         send_email(to_email, subject, body, attachments=attachments or [])
         log = db.get(EmailLog, eid)
@@ -44,6 +45,7 @@ def queue_email(
             log.status = "sent"
             log.sent_at = datetime.now(timezone.utc)
             db.commit()
+            sent = True
     except Exception:
         log = db.get(EmailLog, eid)
         if log:
@@ -51,7 +53,7 @@ def queue_email(
             db.commit()
         # Worker will retry via process_email_queue
 
-    return eid
+    return eid, sent
 
 
 def send_email(to_email: str, subject: str, body: str, attachments: list[tuple[str, bytes, str]]):
@@ -177,7 +179,7 @@ def send_booking_confirmation_and_ticket(db: Session, booking_ref: str) -> bool:
     )
     if pdf:
         attachments.append((f"{b.booking_ref}.pdf", pdf, "application/pdf"))
-    queue_email(
+    _eid, sent = queue_email(
         db,
         to_email,
         subject,
@@ -186,7 +188,7 @@ def send_booking_confirmation_and_ticket(db: Session, booking_ref: str) -> bool:
         attachments=attachments or None,
         attach_ticket_booking_ref=b.booking_ref,
     )
-    return True
+    return sent
 
 
 def send_unpaid_ticket_email(db: Session, booking_ref: str) -> bool:
@@ -215,7 +217,7 @@ def send_unpaid_ticket_email(db: Session, booking_ref: str) -> bool:
         "Please pay using the bank details on the attached ticket, or try the payment link again.\n\n"
         "If you have already paid, please contact us with your booking reference."
     )
-    queue_email(
+    _eid, sent = queue_email(
         db,
         to_email,
         subject,
@@ -223,4 +225,4 @@ def send_unpaid_ticket_email(db: Session, booking_ref: str) -> bool:
         related_booking_ref=b.booking_ref,
         attachments=[(f"{b.booking_ref}_unpaid.pdf", pdf_bytes, "application/pdf")],
     )
-    return True
+    return sent

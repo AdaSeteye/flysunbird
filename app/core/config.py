@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     GCS_BUCKET_NAME: str = ""
     GOOGLE_APPLICATION_CREDENTIALS: str = ""
 
+    # Ticket PDF branding (optional). Paths can be absolute or relative to project root. Empty = no logo.
+    TICKET_HEADER_LOGO_PATH: str = ""   # e.g. app/assets/ticket_header_logo.png
+    TICKET_FOOTER_LOGO_PATH: str = ""   # e.g. app/assets/ticket_footer_logo.png
+
     # Stripe (Checkout redirect)
     STRIPE_SECRET_KEY: str = ""
     STRIPE_PUBLISHABLE_KEY: str = ""
@@ -58,6 +62,13 @@ class Settings(BaseSettings):
     # Bootstrap admin (seed): only one admin is created. Set ADMIN_INITIAL_PASSWORD in production.
     ADMIN_EMAIL: str = "admin@flysunbird.co.tz"
     ADMIN_INITIAL_PASSWORD: str = "ChangeMe123!"
+
+    # Ticket footer branding (drawn on PDF). Optional overrides; defaults shown.
+    TICKET_FOOTER_COMPANY: str = "Premier Air Limited t/a flySunBird"
+    TICKET_FOOTER_EMAIL: str = "booking@flysunbird.com"
+    TICKET_FOOTER_PHONE: str = "+255 (0) 795 777 777"
+    TICKET_FOOTER_ADDRESS_LINE1: str = "3rd Floor, De Ocean Plaza, Masaki."
+    TICKET_FOOTER_ADDRESS_LINE2: str = "Dar es Salaam, United Republic of Tanzania"
 
     # Bank details for unpaid ticket
     BANK_NAME: str = "CRDB BANK"

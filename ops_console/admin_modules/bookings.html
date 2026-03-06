@@ -8,7 +8,6 @@
   <div class="hrow">
     <div>
       <h1>Bookings Inbox</h1>
-      <div class="sub">Bookings and passenger data. Create drafts or view incoming bookings.</div>
     </div>
     <div class="actions">
       <button class="btn" type="button" data-label="Refresh" onclick="refreshWithFeedback(this)">Refresh</button>
@@ -16,16 +15,14 @@
   </div>
 
   <div class="card">
-    <div style="font-weight:900">Create booking (Ops)</div>
-    <div class="sub">Pick route and date, then create a booking or open an existing one.</div>
+    <div style="font-weight:900">Create booking</div>
     <div class="hr"></div>
 
     <div class="row" id="opsOriginRow">
       <div style="grid-column:1/-1">
-        <label>Origin (for calendar)</label>
+        <label>Origin</label>
         <select id="opsOrigin"><option value="">— Select origin —</option></select>
-        <div id="opsSignInHint" class="sub" style="display:none; margin-top:6px; color:#c00;">Sign in (login page) to load origins and slots.</div>
-        <div class="sub" style="margin-top:6px">Pick origin, then choose date from the calendar to see available slots.</div>
+        <div id="opsSignInHint" class="sub" style="display:none; margin-top:6px; color:#c00;">Sign in to load.</div>
       </div>
     </div>
     <div class="row" style="margin-top:10px">
@@ -64,7 +61,6 @@
     
     <div class="hr"></div>
     <div style="font-weight:900">Passenger details</div>
-    <div class="sub">Required for each passenger.</div>
     <div class="hr"></div>
     <div id="passengersWrap"></div>
 
@@ -625,17 +621,6 @@ async function addOffline(){
       <div style="font-weight:900">Passengers</div>
       <code class="k">${esc(JSON.stringify(x.passengers||[], null, 2))}</code>
 
-      ${ONLINE && isPaid ? `
-      <div class="hr"></div>
-      <div style="font-weight:900">Assign Pilot</div>
-      <div class="sub">Assign a pilot to this flight.</div>
-      <div class="row" style="margin-top:10px;align-items:center">
-        <label style="white-space:nowrap">Pilot email</label>
-        <input id="assignPilotEmail" type="email" placeholder="pilot@flysunbird.co.tz" style="max-width:260px"/>
-        <button class="btn" onclick="(async()=>{const e=document.getElementById('assignPilotEmail');const ref='${refA}';if(!e||!e.value.trim()){alert('Enter pilot email');return;}try{await OpsBookings.assignPilotRemote(ref,e.value.trim());alert('Pilot assigned.');openDetail(ref);}catch(err){alert(err.message||'Failed');})()">Assign Pilot</button>
-      </div>
-      ` : ""}
-
       ${(x.payments && x.payments.length) ? `
       <div class="hr"></div>
       <div style="font-weight:900">Payments</div>
@@ -654,7 +639,7 @@ async function addOffline(){
 
   async function render(){
     if(!ONLINE){
-      document.getElementById('tbody').innerHTML = `<tr><td colspan="8" class="sub">Sign in from the login page to view bookings.</td></tr>`;
+      document.getElementById('tbody').innerHTML = `<tr><td colspan="8" class="sub">Sign in to view bookings.</td></tr>`;
       return;
     }
     let list = [];

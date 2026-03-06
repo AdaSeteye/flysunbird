@@ -43,10 +43,6 @@
     <div class="card" id="overviewHintCard" style="display:none">
       <div class="sub">No slots today. <button type="button" class="btn small primary" id="overviewGoFillSlots">Fill slots</button></div>
     </div>
-
-    <div class="card">
-      <div class="sub">Create bookings, payment links, confirm or cancel. Sign in to see data.</div>
-    </div>
   </div>
 
   <script src="../admin_assets/ops_api.js"></script>
@@ -135,9 +131,9 @@
           var revenueToday = summary.revenue_today_usd != null ? summary.revenue_today_usd : 0;
           document.getElementById('kpis').innerHTML =
             '<div class="grid">' +
-            '<div class="card" style="margin:0"><div class="sub">Inventory slots (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(slotsToday) + '</div></div>' +
+            '<div class="card" style="margin:0"><div class="sub">Filled slots (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(slotsToday) + '</div></div>' +
             '<div class="card" style="margin:0"><div class="sub">Seats available (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(stats.seatsAvailable != null ? stats.seatsAvailable : 0) + '</div></div>' +
-            '<div class="card" style="margin:0"><div class="sub">Bookings</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(list.length) + '</div></div>' +
+            '<div class="card" style="margin:0"><div class="sub">Bookings (all statuses)</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(list.length) + '</div></div>' +
             '<div class="card" style="margin:0"><div class="sub">Pending payment</div><div style="font-weight:900;font-size:18px;margin-top:6px">' + esc(pending) + '</div></div>' +
             '<div class="card" style="margin:0"><div class="sub">Revenue (today)</div><div style="font-weight:900;font-size:18px;margin-top:6px">$' + esc(revenueToday) + '</div></div>' +
             '</div>';
@@ -177,7 +173,7 @@
           return;
         }
       }
-      document.getElementById('kpis').innerHTML = '<div class="sub">Sign in to view overview.</div>';
+      document.getElementById('kpis').innerHTML = '<div class="sub">Sign in to load.</div>';
       document.getElementById('chartSection').style.display = 'none';
       var na = document.getElementById('needsAttentionCard');
       if (na) na.style.display = 'none';

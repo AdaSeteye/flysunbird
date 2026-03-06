@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import math
 import os
 import re
 from datetime import datetime, timezone
@@ -28,6 +29,156 @@ CHECKIN_NOTES = """• A valid government-issued photo ID is required at check-i
 • Flights are subject to weather, air traffic, and operational conditions; the pilot's decision is final.
 • Intoxicated or disruptive passengers may be denied boarding; medical conditions must be declared in advance.
 • For booking changes, contact support within 24 hours of your booking."""
+
+
+def _resolve_ticket_logo_path(which: str) -> str | None:
+    """Resolve path to header or footer logo. Returns path if file exists, else None."""
+    assert which in ("header", "footer")
+    path = (getattr(settings, f"TICKET_{which.upper()}_LOGO_PATH", None) or "").strip()
+    if not path:
+        _app_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.abspath(os.path.join(_app_root, "assets", f"ticket_{which}_logo.png"))
+    elif not os.path.isabs(path):
+        _project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        path = os.path.normpath(os.path.join(_project_root, path))
+    return path if os.path.isfile(path) else None
+
+
+def _draw_flysunbird_header_logo(c: canvas.Canvas, x: float, y_top: float, max_height: float = 32) -> float:
+    """Draw FlySunbird logo (wing + 'fly' + 'SunBird' + tagline) with ReportLab. Returns height used."""
+    orange = (0.92, 0.55, 0.15)
+    red = (0.6, 0.12, 0.18)
+    grey = (0.35, 0.35, 0.35)
+    font_main = "Helvetica-Bold"
+    size_main = 14
+    size_tag = 7
+    wing_w = 20
+    gap = 4
+    c.saveState()
+    # Wing: simple upward curved stroke (left of text)
+    c.setStrokeColorRGB(*orange)
+    c.setLineWidth(2)
+    c.setLineCap(1)
+    c.setLineJoin(1)
+    x0, y0 = x, y_top - max_height + 6
+    c.moveTo(x0, y0)
+    # Bezier: start (x0,y0), controls (x0+2,y0+8), (x0+wing_w-2,y0+18), end (x0+wing_w,y0+20)
+    c.curveTo(x0 + 2, y0 + 8, x0 + wing_w - 2, y0 + 18, x0 + wing_w, y0 + 20)
+    c.stroke()
+    # "fly" in orange, then "SunBird" in red
+    tx = x + wing_w + gap
+    ty = y_top - 10
+    c.setFillColorRGB(*orange)
+    c.setFont(font_main, size_main)
+    c.drawString(tx, ty, "fly")
+    fly_w = c.stringWidth("fly", font_main, size_main)
+    c.setFillColorRGB(*red)
+    c.drawString(tx + fly_w, ty, "SunBird")
+    # Tagline below
+    c.setFillColorRGB(*grey)
+    c.setFont("Helvetica", size_tag)
+    c.drawString(tx, ty - 11, "A unique experience...")
+    c.restoreState()
+    return max_height
+
+
+def _draw_flysunbird_footer_design(
+    c: canvas.Canvas, x_left: float, x_right: float, y_bottom: float, height: float
+) -> None:
+    """Draw footer: left = sunbird graphic + company/contact/address; right = red/pink/gold triangle pattern."""
+    w = x_right - x_left
+    y_top = y_bottom + height
+    c.saveState()
+
+    # ---- Left: bird graphic (simplified sunbird on branch) ----
+    bx, by = x_left + 18, y_bottom + height - 22
+    # Branch: brown line
+    c.setStrokeColorRGB(0.45, 0.3, 0.2)
+    c.setLineWidth(1.2)
+    c.moveTo(bx - 5, by - 2)
+    c.lineTo(bx + 28, by - 2)
+    c.stroke()
+    # Flowers: small red circles
+    c.setFillColorRGB(0.85, 0.2, 0.2)
+    for fx, fy in [(bx + 4, by + 1), (bx + 14, by + 2), (bx + 22, by)]:
+        c.circle(fx, fy, 2.5, fill=1, stroke=0)
+    # Bird body (ellipse-like path), yellow breast
+    c.setFillColorRGB(0.98, 0.85, 0.25)
+    c.setStrokeColorRGB(0.3, 0.25, 0.2)
+    c.setLineWidth(0.5)
+    c.ellipse(bx + 6, by - 1, bx + 20, by + 14)
+    c.fillStroke()
+    # Head (blue-green)
+    c.setFillColorRGB(0.2, 0.55, 0.6)
+    c.circle(bx + 18, by + 12, 5, fill=1, stroke=0)
+    # Beak
+    c.setFillColorRGB(0.4, 0.3, 0.2)
+    c.moveTo(bx + 22, by + 11)
+    c.lineTo(bx + 27, by + 10)
+    c.lineTo(bx + 23, by + 9)
+    c.closePath()
+    c.fill()
+
+    # ---- Left: company and contact text ----
+    tx = x_left
+    ty = y_bottom + height - 38
+    c.setFillColorRGB(0, 0, 0)
+    c.setFont("Helvetica-Bold", 8)
+    company = getattr(settings, "TICKET_FOOTER_COMPANY", "") or "Premier Air Limited t/a flySunBird"
+    c.drawString(tx, ty, company[:50])
+    c.setFont("Helvetica", 7)
+    email = getattr(settings, "TICKET_FOOTER_EMAIL", "") or "booking@flysunbird.com"
+    c.drawString(tx, ty - 8, f"Email: {email}"[:45])
+    phone = getattr(settings, "TICKET_FOOTER_PHONE", "") or "+255 (0) 795 777 777"
+    c.drawString(tx, ty - 16, f"Mobile: {phone}"[:45])
+    # Map pin (small yellow diamond/circle)
+    c.setFillColorRGB(0.98, 0.88, 0.35)
+    c.circle(tx + 4, ty - 26, 3, fill=1, stroke=0)
+    addr1 = getattr(settings, "TICKET_FOOTER_ADDRESS_LINE1", "") or "3rd Floor, De Ocean Plaza, Masaki."
+    addr2 = getattr(settings, "TICKET_FOOTER_ADDRESS_LINE2", "") or "Dar es Salaam, United Republic of Tanzania"
+    c.setFillColorRGB(0, 0, 0)
+    c.drawString(tx + 10, ty - 25, addr1[:48])
+    c.drawString(tx + 10, ty - 32, addr2[:48])
+
+    # ---- Right: tessellating triangles (red, pink, gold, white) fading to top-left ----
+    side = 7
+    h_tri = side * math.sqrt(3) / 2
+    red = (0.6, 0.12, 0.2)
+    pink = (0.88, 0.55, 0.6)
+    gold = (0.92, 0.72, 0.4)
+    white = (1.0, 1.0, 1.0)
+    colors = [red, pink, gold, white]
+    # Pattern fills right portion; start from right edge
+    x0 = x_right - (w * 0.45)
+    y0 = y_bottom
+    row = 0
+    while y0 < y_top + h_tri:
+        for col in range(35):
+            x = x0 - row * (side / 2) + col * side
+            if x > x_right + side:
+                break
+            # Fade: bottom-right = red/gold (idx 0,1), top-left = pink/white (idx 2,3)
+            nx = (x - x_left) / w if w > 0 else 0
+            ny = (y0 - y_bottom) / height if height > 0 else 0
+            t = max(0, min(1, 1.0 - 0.5 * nx - 0.5 * ny))
+            idx = min(3, int(t * 4))
+            c.setFillColorRGB(*colors[idx])
+            c.setStrokeColorRGB(*colors[idx])
+            if row % 2 == 0:
+                # Base-down triangle
+                c.moveTo(x, y0)
+                c.lineTo(x + side, y0)
+                c.lineTo(x + side / 2, y0 + h_tri)
+            else:
+                # Base-up triangle (base at y0+h_tri, peak at y0)
+                c.moveTo(x, y0 + h_tri)
+                c.lineTo(x + side, y0 + h_tri)
+                c.lineTo(x + side / 2, y0)
+            c.closePath()
+            c.fillStroke()
+        y0 += h_tri
+        row += 1
+    c.restoreState()
 
 
 def _ticket_url(booking_ref: str) -> str:
@@ -147,6 +298,23 @@ def render_ticket_pdf_bytes(
     x_right = w - margin
     y = h - margin
 
+    # ----- Header logo (drawn: wing + flySunBird + tagline) -----
+    logo_header_path = _resolve_ticket_logo_path("header")
+    if logo_header_path:
+        try:
+            img_reader = ImageReader(logo_header_path)
+            iw, ih = img_reader.getSize()
+            max_logo_h = 36
+            scale = min(1.0, max_logo_h / ih) if ih else 1.0
+            draw_w, draw_h = iw * scale, ih * scale
+            c.drawImage(img_reader, x_left, y - draw_h, width=draw_w, height=draw_h)
+            y -= draw_h + 12
+        except Exception:
+            pass
+    else:
+        logo_h = _draw_flysunbird_header_logo(c, x_left, y, max_height=32)
+        y -= logo_h + 12
+
     is_paid = (payment_status or "").lower() == "paid"
     status_header = "PAID • CONFIRMED" if is_paid else "UNPAID"
     status_line2 = "PAID" if is_paid else "UNPAID"
@@ -251,18 +419,46 @@ def render_ticket_pdf_bytes(
         pass
     y -= 20
 
-    # ----- Footer line -----
+    # ----- Footer: line, then branding block at bottom -----
+    c.setStrokeColorRGB(0.75, 0.75, 0.75)
+    c.setLineWidth(0.5)
+    c.line(x_left, y, x_right, y)
+    c.setStrokeColorRGB(0, 0, 0)
+    y -= 14
+
+    logo_footer_path = _resolve_ticket_logo_path("footer")
+    if logo_footer_path:
+        try:
+            img_reader = ImageReader(logo_footer_path)
+            iw, ih = img_reader.getSize()
+            max_footer_h = 24
+            scale = min(1.0, max_footer_h / ih) if ih else 1.0
+            draw_w, draw_h = iw * scale, ih * scale
+            c.drawImage(img_reader, x_left, y - draw_h, width=draw_w, height=draw_h)
+            y -= draw_h + 8
+        except Exception:
+            pass
+
+    # Footer branding band height; footer text sits just above it, "Generated" at very bottom
+    footer_design_height = 50
+    footer_text_y1 = footer_design_height + 10
+    footer_text_y2 = footer_design_height
+    generated_y = 6
+
+    # Drawn footer design (sunbird + company/address left, triangle pattern right)
+    _draw_flysunbird_footer_design(c, x_left, x_right, 0, footer_design_height)
+
+    # ----- Footer text (above the design) -----
     exp_short = (experience or "").split(".")[0].strip() or "Scenic"
     footer = f"{booking_ref} • {passenger_name or 'Passenger'} • {date_str} • {start_time}"
     c.setFont("Helvetica", 8)
-    c.drawString(x_left, y, footer[:95])
-    y -= 10
-    c.drawString(x_left, y, f"{route_from} → {route_to} • Seats: {pax} • {exp_short}")
-    y -= 14
+    c.setFillColorRGB(0, 0, 0)
+    c.drawString(x_left, footer_text_y1, footer[:95])
+    c.drawString(x_left, footer_text_y2, f"{route_from} → {route_to} • Seats: {pax} • {exp_short}")
 
     c.setFont("Helvetica", 7)
     c.setFillColorRGB(0.5, 0.5, 0.5)
-    c.drawString(x_left, 24, f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    c.drawString(x_left, generated_y, f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     c.setFillColorRGB(0, 0, 0)
 
     c.showPage()
