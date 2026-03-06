@@ -8,7 +8,7 @@ from app.models.passenger import Passenger
 from app.models.time_entry import TimeEntry
 from app.services.settings_service import get_usd_to_tzs_rate
 
-HOLD_MINUTES = 15
+HOLD_MINUTES = 4  # unpaid bookings (customer or ops) expire after 4 minutes; seat released for others
 
 def make_booking_ref() -> str:
     import random, string

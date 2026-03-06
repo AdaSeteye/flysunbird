@@ -18,7 +18,7 @@ def expire_holds():
         now = datetime.now(timezone.utc)
         try:
             expired = db.query(Booking).filter(
-                Booking.status == "PENDING_PAYMENT",
+                Booking.status.in_(["PENDING_PAYMENT", "DRAFT"]),
                 Booking.payment_status.in_(["pending", "unpaid"]),
                 Booking.hold_expires_at != None,
                 Booking.hold_expires_at < now,

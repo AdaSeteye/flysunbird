@@ -657,6 +657,8 @@ async function addOffline(){
       const pay = (b.paymentStatus||"").toLowerCase();
       const isPaid = pay === "paid";
       const isCancelled = status === "CANCELLED";
+      const isExpired = status === "EXPIRED";
+      const isDone = isCancelled || isExpired;
       const routeCell = (b.from && b.to) ? (b.from + " → " + b.to) : (b.from||b.to||"-");
       return `
       <tr>
@@ -664,14 +666,14 @@ async function addOffline(){
         <td><b>${esc(ref)}</b></td>
         <td>${esc(routeCell)}</td>
         <td>${esc(b.dateStr||b.date||"-")}</td>
-        <td><span class="badge ${isCancelled?'bad':isPaid?'ok':'warn'}">${esc(status)}</span></td>
+        <td><span class="badge ${isDone?'bad':isPaid?'ok':'warn'}">${esc(status)}</span></td>
         <td><span class="badge ${isPaid?'ok':pay==='failed'?'bad':'warn'}">${esc(b.paymentStatus||'unpaid')}</span></td>
         <td class="sub">${esc(b.contactName||(b.contact&&b.contact.name)||"-")} • ${esc(b.contactEmail||(b.contact&&b.contact.email)||"-")}</td>
         <td class="actions">
           <button class="btn small" onclick="openDetail('${refA}')">Open</button>
-          ${!isPaid ? `<button class="btn small" onclick="copyLink('${refA}')" title="Copy payment link">Copy link</button>` : ""}
-          ${!isPaid ? `<button class="btn small" onclick="setPay('${refA}','PAID', undefined, event)">Mark Paid</button>` : ""}
-          ${!isCancelled ? `<button class="btn small danger" onclick="setStatus('${refA}','CANCELLED', event)">Cancel</button>` : ""}
+          ${!isPaid && !isExpired ? `<button class="btn small" onclick="copyLink('${refA}')" title="Copy payment link">Copy link</button>` : ""}
+          ${!isPaid && !isExpired ? `<button class="btn small" onclick="setPay('${refA}','PAID', undefined, event)">Mark Paid</button>` : ""}
+          ${!isDone ? `<button class="btn small danger" onclick="setStatus('${refA}','CANCELLED', event)">Cancel</button>` : ""}
         </td>
       </tr>
     `;
