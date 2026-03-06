@@ -61,10 +61,9 @@ def _draw_flysunbird_header_logo(c: canvas.Canvas, x: float, y_top: float, max_h
     c.setLineCap(1)
     c.setLineJoin(1)
     x0, y0 = x, y_top - max_height + 6
-    c.moveTo(x0, y0)
     # Bezier: start (x0,y0), controls (x0+2,y0+8), (x0+wing_w-2,y0+18), end (x0+wing_w,y0+20)
-    c.curveTo(x0 + 2, y0 + 8, x0 + wing_w - 2, y0 + 18, x0 + wing_w, y0 + 20)
-    c.stroke()
+    # Canvas does not support moveTo/curveTo directly; use bezier().
+    c.bezier(x0, y0, x0 + 2, y0 + 8, x0 + wing_w - 2, y0 + 18, x0 + wing_w, y0 + 20)
     # "fly" in orange, then "SunBird" in red
     tx = x + wing_w + gap
     ty = y_top - 10
@@ -95,9 +94,7 @@ def _draw_flysunbird_footer_design(
     # Branch: brown line
     c.setStrokeColorRGB(0.45, 0.3, 0.2)
     c.setLineWidth(1.2)
-    c.moveTo(bx - 5, by - 2)
-    c.lineTo(bx + 28, by - 2)
-    c.stroke()
+    c.line(bx - 5, by - 2, bx + 28, by - 2)
     # Flowers: small red circles
     c.setFillColorRGB(0.85, 0.2, 0.2)
     for fx, fy in [(bx + 4, by + 1), (bx + 14, by + 2), (bx + 22, by)]:
@@ -106,18 +103,18 @@ def _draw_flysunbird_footer_design(
     c.setFillColorRGB(0.98, 0.85, 0.25)
     c.setStrokeColorRGB(0.3, 0.25, 0.2)
     c.setLineWidth(0.5)
-    c.ellipse(bx + 6, by - 1, bx + 20, by + 14)
-    c.fillStroke()
+    c.ellipse(bx + 6, by - 1, bx + 20, by + 14, stroke=1, fill=1)
     # Head (blue-green)
     c.setFillColorRGB(0.2, 0.55, 0.6)
     c.circle(bx + 18, by + 12, 5, fill=1, stroke=0)
     # Beak
     c.setFillColorRGB(0.4, 0.3, 0.2)
-    c.moveTo(bx + 22, by + 11)
-    c.lineTo(bx + 27, by + 10)
-    c.lineTo(bx + 23, by + 9)
-    c.closePath()
-    c.fill()
+    p = c.beginPath()
+    p.moveTo(bx + 22, by + 11)
+    p.lineTo(bx + 27, by + 10)
+    p.lineTo(bx + 23, by + 9)
+    p.close()
+    c.drawPath(p, stroke=0, fill=1)
 
     # ---- Left: company and contact text ----
     tx = x_left
@@ -164,18 +161,20 @@ def _draw_flysunbird_footer_design(
             idx = min(3, int(t * 4))
             c.setFillColorRGB(*colors[idx])
             c.setStrokeColorRGB(*colors[idx])
+            p = c.beginPath()
             if row % 2 == 0:
                 # Base-down triangle
-                c.moveTo(x, y0)
-                c.lineTo(x + side, y0)
-                c.lineTo(x + side / 2, y0 + h_tri)
+                p.moveTo(x, y0)
+                p.lineTo(x + side, y0)
+                p.lineTo(x + side / 2, y0 + h_tri)
             else:
                 # Base-up triangle (base at y0+h_tri, peak at y0)
-                c.moveTo(x, y0 + h_tri)
-                c.lineTo(x + side, y0 + h_tri)
-                c.lineTo(x + side / 2, y0)
-            c.closePath()
-            c.fillStroke()
+                p.moveTo(x, y0 + h_tri)
+                p.lineTo(x + side, y0 + h_tri)
+                p.lineTo(x + side / 2, y0)
+            p.close()
+            # No stroke to avoid seams; fill only.
+            c.drawPath(p, stroke=0, fill=1)
         y0 += h_tri
         row += 1
     c.restoreState()

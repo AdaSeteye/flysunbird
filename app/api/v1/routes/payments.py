@@ -143,7 +143,7 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         if not buyer_name:
             buyer_name = "Customer"
 
-        from app.services.selcom_service import create_checkout_order, create_checkout_order_minimal
+        from app.services.selcom_service import create_checkout_order
 
         client_base = (settings.CLIENT_BASE_URL or "").rstrip("/")
         api_public = (settings.API_PUBLIC_URL or "").rstrip("/")
@@ -162,10 +162,8 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
             cancel_url=cancel_url,
             webhook_url=webhook_url,
         )
-        # Try minimal first (many vendors only have this); fallback to full Create Order if no URL
-        resp = create_checkout_order_minimal(**common)
-        if resp.get("result") != "SUCCESS":
-            resp = create_checkout_order(**common)
+        # Use full Create Order (supports cards + mobile money).
+        resp = create_checkout_order(**common)
     except HTTPException:
         raise
     except ValueError as e:
@@ -180,8 +178,7 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
             logger.warning("[Selcom] Failed to send unpaid ticket email after failure: %s", email_err)
         raise HTTPException(status_code=502, detail=str(e))
 
-    # Selcom response: structure may vary; try common keys for payment/redirect URL. for payment/redirect URL.
-    # Create-order-minimal returns data[0].payment_gateway_url (base64-encoded per Selcom docs).
+    # Selcom response: structure may vary; try common keys for payment/redirect URL.
     def _decode_url(val: str) -> str:
         if not val or not isinstance(val, str):
             return val or ""
@@ -245,46 +242,6 @@ def selcom_create_order(req: SelcomCreateOrderRequest, db: Session = Depends(get
         return out
 
     url = _extract_url(resp)
-    # If we have a URL from minimal but Selcom gateway often returns 404, try full create-order and use its URL (some vendors only serve full checkout).
-    if url:
-        try:
-            from app.services.selcom_service import create_checkout_order
-            client_base = (settings.CLIENT_BASE_URL or "").rstrip("/")
-            api_public = (settings.API_PUBLIC_URL or "").rstrip("/")
-            redirect_url = f"{client_base}/fly/confirmation.html?ref={b.booking_ref}" if client_base else None
-            cancel_url = f"{client_base}/fly/payment.html?bookingRef={b.booking_ref}" if client_base else None
-            webhook_url = f"{api_public}/api/v1/webhooks/selcom" if api_public else None
-            resp_full = create_checkout_order(
-                order_id=b.booking_ref, amount=amount_tzs, buyer_name=buyer_name,
-                buyer_email=buyer_email or "customer@flysunbird.co.tz",
-                buyer_phone=buyer_phone or "255000000000", currency="TZS",
-                redirect_url=redirect_url, cancel_url=cancel_url, webhook_url=webhook_url,
-            )
-            if resp_full.get("result") == "SUCCESS":
-                url_full = _extract_url(resp_full)
-                if url_full and url_full != url:
-                    url = url_full
-                    logger.info("[Selcom] using full create-order URL (may avoid gateway 404)")
-        except Exception as e:
-            logger.warning("[Selcom] full create-order (optional) failed: %s", e)
-    if not url:
-        try:
-            from app.services.selcom_service import create_checkout_order
-            client_base = (settings.CLIENT_BASE_URL or "").rstrip("/")
-            api_public = (settings.API_PUBLIC_URL or "").rstrip("/")
-            redirect_url = f"{client_base}/fly/confirmation.html?ref={b.booking_ref}" if client_base else None
-            cancel_url = f"{client_base}/fly/payment.html?bookingRef={b.booking_ref}" if client_base else None
-            webhook_url = f"{api_public}/api/v1/webhooks/selcom" if api_public else None
-            resp = create_checkout_order(
-                order_id=b.booking_ref, amount=amount_tzs, buyer_name=buyer_name,
-                buyer_email=buyer_email or "customer@flysunbird.co.tz",
-                buyer_phone=buyer_phone or "255000000000", currency="TZS",
-                redirect_url=redirect_url, cancel_url=cancel_url, webhook_url=webhook_url,
-            )
-            logger.info("[Selcom] full create-order fallback response: %s", resp)
-            url = _extract_url(resp)
-        except Exception as e:
-            logger.warning("[Selcom] full create-order fallback failed: %s", e)
     if not url:
         msg = (resp.get("message") if isinstance(resp, dict) else None) or (resp.get("result") if isinstance(resp, dict) else None)
         detail = "Selcom did not return a payment URL."
