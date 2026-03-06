@@ -365,17 +365,18 @@ def _render_ticket_pdf_from_template(
     }
     doc = fitz.open(template_path)
     page = doc[0]
+    rot = getattr(page, "rotation", 0) or 0
+    pad = 2
     for _name, (x0, y0, x1, y1), get_val in _TEMPLATE_FIELDS:
         val = get_val(ctx)
         if not val:
             continue
-        rect = fitz.Rect(x0, y0, x1, y1)
+        rect = fitz.Rect(max(0, x0 - pad), max(0, y0 - pad), min(page.rect.width, x1 + pad), min(page.rect.height, y1 + pad))
         shape = page.new_shape()
         shape.draw_rect(rect)
         shape.finish(fill=(1, 1, 1), color=(1, 1, 1))
         shape.commit()
-        # Baseline at bottom of bbox so text sits exactly as in standard PDF
-        page.insert_text((x0, y1 - 2), str(val)[:80], fontsize=10, fontname="helv")
+        page.insert_text((x0, y1 - 2), str(val)[:80], fontsize=10, fontname="helv", rotate=rot)
     # QR code for ticket URL (overlay on template)
     try:
         ticket_url = _ticket_url(booking_ref)
@@ -385,7 +386,20 @@ def _render_ticket_pdf_from_template(
         shape.draw_rect(qr_rect)
         shape.finish(fill=(1, 1, 1), color=(1, 1, 1))
         shape.commit()
-        page.insert_image(qr_rect, stream=qr_bytes)
+        try:
+            page.insert_image(qr_rect, stream=qr_bytes)
+        except Exception:
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+                tmp.write(qr_bytes)
+                tmp.flush()
+                try:
+                    page.insert_image(qr_rect, filename=tmp.name)
+                finally:
+                    try:
+                        os.unlink(tmp.name)
+                    except Exception:
+                        pass
     except Exception:
         pass
     buf = io.BytesIO()
