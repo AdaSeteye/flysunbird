@@ -211,8 +211,9 @@ def _make_qr_image_bytes(url: str, box_size: int = 3, border: int = 2) -> bytes:
 
 
 def _footer2_experience(k: dict) -> str:
-    """Format footer line 2 exactly as standard: 'Route → To • Seats: N • Type duration min'."""
-    route = f"{k.get('route_from') or ''} → {k.get('route_to') or ''}".strip()
+    """Format footer line 2 exactly as standard: 'Route → To • Seats: N • Type duration min'. Use → (not dot) between from/to."""
+    arrow = "\u2192"  # explicit rightward arrow so it never renders as dot
+    route = f"{k.get('route_from') or ''} {arrow} {k.get('route_to') or ''}".strip()
     pax = k.get("pax") or 0
     exp = (k.get("experience") or "").strip()
     # Standard shows e.g. "Scenic 30 min" — extract "N Minutes Type." -> "Type N min"
@@ -315,8 +316,8 @@ _TEMPLATE_FIELDS = [
     # Amount: single number as on standard (e.g. "500")
     ("amount", (380.8, 347.6, 400.0, 358.6), lambda k: str(k.get("amount_usd") or k.get("amount_tzs") or 0)),
 ]
-# Footer: one band to erase both placeholder lines, then we draw two lines at fixed baselines (template: line1 ~558, line2 ~573)
-_FOOTER_ERASE_RECT = (90, 538, 562, 590)  # single white rect covers "PA-ABC123..." and "Zanzibar Stone Town..."
+# Footer: one band to erase both placeholder lines (extend to fully remove "Zanzibar Stone Town → Nungwi • Seats: 2 • Scenic 30 min")
+_FOOTER_ERASE_RECT = (88, 534, 568, 596)
 _FOOTER_LINE1_BASELINE_Y = 556   # first line: booking_ref • passenger • date • time
 _FOOTER_LINE2_BASELINE_Y = 571   # second line: route • Seats • experience
 _FOOTER_X = 102.6
