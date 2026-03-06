@@ -314,10 +314,12 @@ _TEMPLATE_FIELDS = [
     ("pax", (148.2, 347.6, 183.1, 358.6), lambda k: f"{k.get('pax') or 0} Seats"),
     # Amount: single number as on standard (e.g. "500")
     ("amount", (380.8, 347.6, 400.0, 358.6), lambda k: str(k.get("amount_usd") or k.get("amount_tzs") or 0)),
-    # Footer: wide rects so placeholder "PA-ABC123 • Jane Doe..." and "Zanzibar Stone Town → Nungwi..." are fully erased
-    ("footer1", (96, 540, 552, 570), lambda k: f"{k.get('booking_ref')} • {(k.get('passenger_name') or 'Passenger')[:20]} • {k.get('date_str')} • {(k.get('start_time') or '').strip() or '—'}"[:70]),
-    ("footer2", (96, 552, 552, 584), lambda k: _footer2_experience(k)),
 ]
+# Footer: one band to erase both placeholder lines, then we draw two lines at fixed baselines (template: line1 ~558, line2 ~573)
+_FOOTER_ERASE_RECT = (90, 538, 562, 590)  # single white rect covers "PA-ABC123..." and "Zanzibar Stone Town..."
+_FOOTER_LINE1_BASELINE_Y = 556   # first line: booking_ref • passenger • date • time
+_FOOTER_LINE2_BASELINE_Y = 571   # second line: route • Seats • experience
+_FOOTER_X = 102.6
 # QR code position: from template (inspect_ticket_pdf.py image bbox) — same line as "Scan for details"
 _QR_RECT = (471.8, 545.37, 541.1, 614.67)
 
@@ -380,6 +382,19 @@ def _render_ticket_pdf_from_template(
         shape.finish(fill=(1, 1, 1), color=(1, 1, 1))
         shape.commit()
         page.insert_text((x0, y1 - 2), str(val)[:80], fontsize=10, fontname="helv", rotate=rot)
+    # Footer: one white rect to fully erase both placeholder lines, then draw new footer1 and footer2 at correct baselines
+    footer_rect = fitz.Rect(
+        max(0, _FOOTER_ERASE_RECT[0]), max(0, _FOOTER_ERASE_RECT[1]),
+        min(page.rect.width, _FOOTER_ERASE_RECT[2]), min(page.rect.height, _FOOTER_ERASE_RECT[3]),
+    )
+    shape = page.new_shape()
+    shape.draw_rect(footer_rect)
+    shape.finish(fill=(1, 1, 1), color=(1, 1, 1))
+    shape.commit()
+    footer1_val = f"{ctx['booking_ref']} • {(ctx.get('passenger_name') or 'Passenger')[:20]} • {ctx['date_str']} • {(ctx.get('start_time') or '').strip() or '—'}"[:70]
+    footer2_val = _footer2_experience(ctx)
+    page.insert_text((_FOOTER_X, _FOOTER_LINE1_BASELINE_Y), footer1_val[:80], fontsize=10, fontname="helv", rotate=rot)
+    page.insert_text((_FOOTER_X, _FOOTER_LINE2_BASELINE_Y), footer2_val[:80], fontsize=10, fontname="helv", rotate=rot)
     # QR code: cover old template QR (same line as "Scan for details") then place new QR there
     try:
         ticket_url = _ticket_url(booking_ref)
