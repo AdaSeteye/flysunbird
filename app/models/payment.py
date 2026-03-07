@@ -8,7 +8,7 @@ class Payment(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     booking_id: Mapped[str] = mapped_column(String(36), index=True)
-    provider: Mapped[str] = mapped_column(String(40), default="manual")  # stripe/flutterwave/selcom/manual
+    provider: Mapped[str] = mapped_column(String(40), default="manual")  # selcom/manual
     amount_usd: Mapped[int] = mapped_column(Integer)
     amount_tzs: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = mapped_column(String(10), default="USD")

@@ -45,11 +45,6 @@ class Settings(BaseSettings):
     TICKET_HEADER_LOGO_PATH: str = ""   # e.g. app/assets/ticket_header_logo.png
     TICKET_FOOTER_LOGO_PATH: str = ""   # e.g. app/assets/ticket_footer_logo.png
 
-    # Stripe (Checkout redirect)
-    STRIPE_SECRET_KEY: str = ""
-    STRIPE_PUBLISHABLE_KEY: str = ""
-    STRIPE_WEBHOOK_SECRET: str = ""  # For webhook signature verification (e.g. whsec_...)
-
     # Selcom (Tanzania: mobile money, cards). Vendor = Till Number from Selcom.
     SELCOM_BASE_URL: str = "https://apigw.selcommobile.com/v1"
     SELCOM_API_KEY: str = ""

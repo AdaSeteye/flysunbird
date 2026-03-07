@@ -16,7 +16,7 @@
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
         <div>
           <h2 style="margin:0 0 6px;font-weight:900">Payment</h2>
-          <div class="hint">Choose your payment method (Stripe or Selcom), then complete checkout.</div>
+          <div class="hint">Pay with Selcom (mobile money or card in Tanzania).</div>
         </div>
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
           <button class="btn" id="backPassengers" type="button">Back to passengers</button>
@@ -26,24 +26,8 @@
 
       <div class="pay-grid" style="margin-top:14px">
         <div class="card" style="padding:16px">
-          <div class="method-row">
-            <div class="method active" data-method="stripe" role="button" tabindex="0">
-              <div class="t">💳 Pay with Card (Stripe)</div>
-              <div class="d"></div>
-            </div>
-            <div class="method" data-method="selcom" role="button" tabindex="0">
-              <div class="t">🧾 Selcom</div>
-              <div class="d"></div>
-            </div>
-          </div>
-
-          <!-- STRIPE CHECKOUT (redirect) -->
-          <div class="pay-form" data-method="stripe" style="margin-top:14px">
-            <p class="hint">You will be redirected to Stripe to pay securely. No card details are entered on this page.</p>
-          </div>
-
           <!-- SELCOM -->
-          <div class="pay-form" data-method="selcom" style="margin-top:14px; display:none">
+          <div class="pay-form" data-method="selcom" style="margin-top:14px">
             <div class="field-grid">
               <div class="field" style="grid-column:1/-1">
                 <label>Customer phone (mobile money number)</label>

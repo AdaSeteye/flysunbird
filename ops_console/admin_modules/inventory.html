@@ -168,7 +168,7 @@
           const idEsc = (t.id||'').replace(/"/g,'&quot;');
           return `<tr>
             <td>${(t.date_str||'').replace(/</g,'&lt;')}</td>
-            <td>${(t.route_id||'').replace(/</g,'&lt;')}</td>
+            <td>${((t.from_label||'') + ' → ' + (t.to_label||'')).replace(/</g,'&lt;') || (t.route_id||'')}</td>
             <td>${(t.start||'')} - ${(t.end||'')}</td>
             <td><span class="pill">${Number(t.seats_available||0)}</span></td>
             <td>$${p}${overrideNote}</td>

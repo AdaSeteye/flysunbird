@@ -1281,7 +1281,6 @@ from app.services.settings_service import get_usd_to_tzs_rate, set_usd_to_tzs_ra
 def get_payment_status(user: User = Depends(require_roles("ops","admin","superadmin","finance"))):
     """Return whether payment/ticket config is set (no secrets)."""
     from app.core.config import settings
-    stripe_ok = bool(getattr(settings, "STRIPE_SECRET_KEY", None) and str(getattr(settings, "STRIPE_SECRET_KEY", "") or "").strip())
     selcom_ok = bool(
         getattr(settings, "SELCOM_BASE_URL", None) and getattr(settings, "SELCOM_API_KEY", None)
         and getattr(settings, "SELCOM_API_SECRET", None) and getattr(settings, "SELCOM_VENDOR", None)
@@ -1290,7 +1289,6 @@ def get_payment_status(user: User = Depends(require_roles("ops","admin","superad
     api_public = (getattr(settings, "API_PUBLIC_URL", None) or "").strip()
     ticket_dir = getattr(settings, "TICKET_LOCAL_DIR", "") or "./data/tickets"
     return {
-        "stripeConfigured": stripe_ok,
         "selcomConfigured": selcom_ok,
         "clientBaseUrlSet": bool(client_base),
         "apiPublicUrlSet": bool(api_public),

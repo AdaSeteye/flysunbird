@@ -66,7 +66,7 @@ def create_booking(db: Session, time_entry_id: str, booker: User, pax: int, pass
     )
     db.add(booking)
 
-    # Payment record is created when Stripe checkout succeeds (webhook) or mark-paid; no duplicate pending row here.
+    # Payment record is created when Selcom payment succeeds (webhook) or mark-paid; no duplicate pending row here.
 
     for p in passengers[:pax]:
         db.add(Passenger(

@@ -105,7 +105,7 @@ function renderSummary(){
       <div class="line"><div class="k">Phone</div><div class="v">${p0.phone || "—"}</div></div>
       <div class="div"></div>
       <div class="total"><div class="k">Total</div><div class="v">${fmt(total, state.currency)}</div></div>
-      <div class="hint">Pay with Stripe (card) or Selcom (mobile money / card in Tanzania).</div>
+      <div class="hint">Pay with Selcom (mobile money or card in Tanzania).</div>
     </div>
   `;
 }
@@ -189,7 +189,7 @@ function validateRequired(method){
 }
 
 $("#payNow").addEventListener("click", async ()=>{
-  const method = state.paymentMethod || "stripe";
+  const method = "selcom";
 
   const v = validateRequired(method);
   if(!v.ok){
@@ -197,46 +197,8 @@ $("#payNow").addEventListener("click", async ()=>{
     return;
   }
 
-  // Stripe Checkout (redirect): create session and redirect to Stripe
-  if(method === "stripe"){
-    try {
-      $("#payNow").disabled = true;
-      $("#payNow").textContent = "Redirecting to Stripe…";
-      if(!API_BASE){
-        alert("API base not configured. Set FLYSUNBIRD_API_BASE.");
-        return;
-      }
-      const res = await fetch(API_BASE + "/public/payments/stripe/create-checkout-session", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          bookingRef: state.bookingRef,
-          currency: state.currency || "USD"
-        })
-      });
-      const data = await res.json().catch(() => ({}));
-      if(!res.ok){
-        const msg = (data.detail != null || data.message != null) ? (data.detail || data.message) : "Payment request failed";
-        throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
-      }
-      if(data.paymentStatus === "paid" || !data.url){
-        window.location.href = "confirmation.html?ref=" + encodeURIComponent(state.bookingRef || "");
-        return;
-      }
-      window.location.href = data.url;
-      return;
-    } catch(e){
-      console.error(e);
-      alert(e && e.message ? e.message : "Could not start Stripe checkout.");
-    } finally {
-      $("#payNow").disabled = false;
-      $("#payNow").textContent = "Pay now";
-    }
-    return;
-  }
-
   // Selcom: create order and redirect to Selcom payment page (mobile money / card).
-  if(method === "selcom"){
+  {
     try {
       $("#payNow").disabled = true;
       $("#payNow").textContent = "Redirecting to Selcom…";
@@ -273,8 +235,6 @@ $("#payNow").addEventListener("click", async ()=>{
       $("#payNow").disabled = false;
       $("#payNow").textContent = "Pay now";
     }
-    return;
-  }
 });
 
 (async function init(){
@@ -282,6 +242,6 @@ $("#payNow").addEventListener("click", async ()=>{
   if (state.selected && Array.isArray(state.passengers) && state.passengers.length) {
     renderSummary();
     loadTzsRate().then(() => { if (typeof renderSummary === 'function') renderSummary(); });
-    setMethod(state.paymentMethod || "stripe");
+    setMethod("selcom");
   }
 })();
