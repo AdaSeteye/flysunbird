@@ -50,6 +50,7 @@ class SlotsFillRequest(BaseModel):
 class SlotsFillResponse(BaseModel):
     created: int
     ids: List[str] = Field(default_factory=list)
+    skipped: int = 0  # slots not created because same route/date/start already exists
 
 
 class SlotRuleIn(BaseModel):

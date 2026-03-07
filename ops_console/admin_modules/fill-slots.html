@@ -86,7 +86,7 @@
     window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
   }
   const API_BASE = (window.API_BASE || localStorage.getItem("FSB_API_BASE") || "").replace(/\/$/, "");
-  let allOriginLabels = [];
+  let allOriginOptions = [];
 
   async function loadFromToDropdowns() {
     const fromSel = document.getElementById("fromSelect");
@@ -96,11 +96,16 @@
       const res = await fetch(API_BASE + "/public/origins");
       const data = res.ok ? await res.json() : null;
       const list = (data && data.origins) ? data.origins : [];
-      allOriginLabels = (list || []).map(o => (o.label || "").trim()).filter(Boolean);
+      allOriginOptions = (list || []).map(o => {
+        const region = (o.region || "").toUpperCase();
+        const value = (o.value != null && o.value !== "" ? o.value : o.label || "").trim();
+        const display = region === "OTHER" ? (o.sub || value || o.label || "").trim() : (o.label || value || "").trim();
+        return { value, display };
+      }).filter(o => o.value);
       const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
-      fromSel.innerHTML = "<option value=\"\">— Select origin —</option>" +
-        allOriginLabels.map(l => "<option value=\"" + esc(l).replace(/"/g,"&quot;") + "\">" + esc(l) + "</option>").join("");
-      updateToDropdown();
+      const optHtml = allOriginOptions.map(o => "<option value=\"" + esc(o.value).replace(/"/g,"&quot;") + "\">" + esc(o.display) + "</option>").join("");
+      fromSel.innerHTML = "<option value=\"\">— Select origin —</option>" + optHtml;
+      toSel.innerHTML = "<option value=\"\">— Select destination —</option>" + optHtml;
     } catch (e) {
       fromSel.innerHTML = "<option value=\"\">— Could not load (check API) —</option>";
       toSel.innerHTML = "<option value=\"\">— Select destination —</option>";
@@ -108,16 +113,6 @@
   }
 
   function updateToDropdown() {
-    const fromSel = document.getElementById("fromSelect");
-    const toSel = document.getElementById("toSelect");
-    const fromVal = (fromSel && fromSel.value || "").trim();
-    const toVal = (toSel && toSel.value || "").trim();
-    const options = fromVal ? allOriginLabels.filter(l => l !== fromVal) : allOriginLabels.slice();
-    const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
-    toSel.innerHTML = "<option value=\"\">— Select destination —</option>" +
-      options.map(l => "<option value=\"" + esc(l).replace(/"/g,"&quot;") + "\">" + esc(l) + "</option>").join("");
-    if (toVal && toVal !== fromVal && options.indexOf(toVal) !== -1) toSel.value = toVal;
-    else toSel.value = "";
   }
 
   async function getRouteId(fromLabel, toLabel) {
@@ -258,11 +253,22 @@
     const msgEl = document.getElementById("fillMsg");
     try {
       const res = await window.OpsApi.fetch("POST", "/ops/slots/fill", { route_id: routeId, date_str: dateStr, slots });
-      msgEl.textContent = "Created " + (res.created || 0) + " slot(s).";
+      let msg = "Created " + (res.created || 0) + " slot(s).";
+      if (res.skipped && res.skipped > 0) msg += " " + res.skipped + " slot(s) already existed (not created).";
+      msgEl.textContent = msg;
       msgEl.style.color = "";
       if (res.created > 0) loadExisting();
     } catch (e) {
-      msgEl.textContent = e.message || "Save failed.";
+      var errMsg = "Save failed.";
+      if (e && e.message) {
+        try {
+          var d = JSON.parse(e.message);
+          if (d && typeof d.detail === "string") errMsg = d.detail;
+          else if (d && Array.isArray(d.detail) && d.detail[0] && d.detail[0].msg) errMsg = d.detail[0].msg;
+          else errMsg = e.message;
+        } catch (_) { errMsg = e.message; }
+      }
+      msgEl.textContent = errMsg;
       msgEl.style.color = "var(--danger, #c00)";
     } finally {
       if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || "Save"; }

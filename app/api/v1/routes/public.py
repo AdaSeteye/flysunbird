@@ -40,43 +40,38 @@ def _time_entry_price_usd(t) -> int:
         return t.base_price_usd
     return t.price_usd
 
+
+def _region_from_name(name: str) -> str:
+    """Derive DAR | ZANZIBAR | OTHER from location name (dropdown value)."""
+    n = (name or "").strip().lower()
+    if "zanzibar" in n:
+        return "ZANZIBAR"
+    if "other" in n:
+        return "OTHER"
+    return "DAR"
+
+
 @router.get("/public/origins")
 def list_origins(db: Session = Depends(get_db)):
-    """List booking origins from Service Locations. Only "Name Sub" per sub; bare name only when no location with that name has subs (so Dar es Salaam never appears if Dar es Salaam Airport exists)."""
-    locations = db.query(Location).filter(Location.active == True).order_by(Location.region.asc(), Location.name.asc()).all()
-    # Names that have at least one sub anywhere: do not show bare name for these
-    names_that_have_subs = set()
-    for loc in locations:
-        name = (loc.name or "").strip()
-        subs = loc.subs
-        if name and subs:
-            names_that_have_subs.add(name)
+    """List booking origins: one per location (first sub). label=Name Sub; value=sub for Other, else label."""
+    locations = db.query(Location).filter(Location.active == True).order_by(Location.name.asc()).all()
     origins = []
     seen = set()
     for loc in locations:
         name = (loc.name or "").strip()
         subs = loc.subs
-        region_raw = (loc.region or "").lower()
-        if "zanzibar" in region_raw or (name and "zanzibar" in name.lower()):
-            region_group = "ZANZIBAR"
-        elif "other" in region_raw or (name and "other" in name.lower()):
-            region_group = "OTHER"
-        else:
-            region_group = "DAR"
-        if not name:
+        if not name or not subs:
             continue
-        if subs:
-            labels = [f"{name} {sub}".strip() for sub in subs if (f"{name} {sub}".strip())]
-        else:
-            # No subs: only add bare name if no other location with this name has subs
-            if name in names_that_have_subs:
-                continue
-            labels = [name]
-        for label in labels:
-            if not label or label in seen:
-                continue
-            seen.add(label)
-            origins.append({"label": label, "region": region_group})
+        sub = (subs[0] or "").strip() if subs else ""
+        if not sub:
+            continue
+        region_group = _region_from_name(name)
+        label = f"{name} {sub}".strip()
+        if not label or label in seen:
+            continue
+        seen.add(label)
+        value = sub if region_group == "OTHER" else label
+        origins.append({"label": label, "region": region_group, "sub": sub, "value": value})
     return {"origins": origins}
 
 

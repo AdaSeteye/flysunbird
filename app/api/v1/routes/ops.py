@@ -634,6 +634,43 @@ def delete_time_entry(
     return {"ok": True}
 
 
+def _time_to_minutes(t: str) -> int | None:
+    """Parse HH:MM or H:MM to minutes since midnight. Returns None if invalid."""
+    t = (t or "").strip()
+    if not t:
+        return None
+    parts = t.split(":")
+    if len(parts) != 2:
+        return None
+    try:
+        h, m = int(parts[0], 10), int(parts[1], 10)
+        if 0 <= h <= 23 and 0 <= m <= 59:
+            return h * 60 + m
+    except ValueError:
+        pass
+    return None
+
+
+def _slots_overlap(slots: list) -> str | None:
+    """Check for time overlap within the list. Returns brief message if overlap found, else None."""
+    parsed = []
+    for i, s in enumerate(slots):
+        start_min = _time_to_minutes(s.start)
+        end_min = _time_to_minutes(s.end)
+        if start_min is None or end_min is None:
+            continue
+        if start_min >= end_min:
+            return f"Invalid time range: {s.start}–{s.end} (end must be after start)."
+        parsed.append((i, start_min, end_min, s.start, s.end))
+    for i in range(len(parsed)):
+        for j in range(i + 1, len(parsed)):
+            _, a1, a2, l1, l2 = parsed[i]
+            _, b1, b2, _, _ = parsed[j]
+            if a1 < b2 and b1 < a2:
+                return f"Time overlap: {l1}–{l2} overlaps with another slot."
+    return None
+
+
 @router.post("/ops/slots/fill", response_model=SlotsFillResponse)
 def fill_slots_for_day(
     body: SlotsFillRequest,
@@ -641,11 +678,15 @@ def fill_slots_for_day(
     user: User = Depends(require_roles("ops", "admin", "superadmin")),
 ):
     """Create time entries (slots) for a single day and route. Ops fills slots day-by-day; these appear on the customer booking calendar and admin inventory."""
+    overlap_msg = _slots_overlap(body.slots)
+    if overlap_msg:
+        raise HTTPException(status_code=400, detail=overlap_msg)
     route = db.get(Route, body.route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
     rate_tzs = get_usd_to_tzs_rate(db)
     created_ids = []
+    skipped = 0
     for s in body.slots:
         exists = db.query(TimeEntry).filter_by(
             route_id=body.route_id,
@@ -653,6 +694,7 @@ def fill_slots_for_day(
             start=s.start.strip(),
         ).first()
         if exists:
+            skipped += 1
             continue
         te = TimeEntry(
             id=str(uuid.uuid4()),
@@ -672,9 +714,9 @@ def fill_slots_for_day(
         )
         db.add(te)
         created_ids.append(te.id)
-    log_audit(db, user.id, "slots.fill", "time_entry", body.date_str, {"route_id": body.route_id, "created": len(created_ids)})
+    log_audit(db, user.id, "slots.fill", "time_entry", body.date_str, {"route_id": body.route_id, "created": len(created_ids), "skipped": skipped})
     db.commit()
-    return SlotsFillResponse(created=len(created_ids), ids=created_ids)
+    return SlotsFillResponse(created=len(created_ids), ids=created_ids, skipped=skipped)
 
 
 @router.delete("/ops/slots/cleanup-unused")
@@ -1331,9 +1373,22 @@ def ops_list_locations(db: Session = Depends(get_db), user: User = Depends(requi
     items = db.query(Location).order_by(Location.region.asc(), Location.name.asc()).all()
     return [{"id":l.id,"region":l.region,"code":l.code,"name":l.name,"subs":l.subs,"active":bool(l.active)} for l in items]
 
+def _location_code_from_name(name: str) -> str:
+    n = (name or "").strip().lower()
+    if "zanzibar" in n:
+        return "ZNZ"
+    if "other" in n:
+        return "OTH"
+    return "DAR"
+
+
 @router.post("/ops/locations")
 def ops_create_location(body: LocationIn, db: Session = Depends(get_db), user: User = Depends(require_roles("ops","admin","superadmin"))):
-    l = Location(id=str(uuid.uuid4()), region=body.region, code=body.code, name=body.name, subs_csv=",".join(body.subs or []), active=bool(body.active))
+    name = (body.name or "").strip()
+    region = (body.region or name) if body.region is not None else name
+    code = body.code if body.code is not None else _location_code_from_name(name)
+    subs_csv = ",".join((body.subs or [])[:1])  # single sub: take first only
+    l = Location(id=str(uuid.uuid4()), region=region, code=code, name=name, subs_csv=subs_csv, active=bool(body.active))
     db.add(l); db.commit()
     return {"id": l.id}
 
@@ -1343,8 +1398,11 @@ def ops_patch_location(loc_id: str, body: LocationPatch, db: Session = Depends(g
     if not l: raise HTTPException(status_code=404, detail="Location not found")
     if body.region is not None: l.region = body.region
     if body.code is not None: l.code = body.code
-    if body.name is not None: l.name = body.name
-    if body.subs is not None: l.subs_csv = ",".join(body.subs or [])
+    if body.name is not None:
+        l.name = body.name
+        if body.region is None: l.region = body.name
+        if body.code is None: l.code = _location_code_from_name(body.name)
+    if body.subs is not None: l.subs_csv = ",".join((body.subs or [])[:1])
     if body.active is not None: l.active = bool(body.active)
     db.commit()
     return {"ok": True}

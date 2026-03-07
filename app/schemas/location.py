@@ -2,8 +2,8 @@ from pydantic import BaseModel
 from typing import List, Optional
 
 class LocationIn(BaseModel):
-    region: str
-    code: str
+    region: Optional[str] = None
+    code: Optional[str] = None
     name: str
     subs: List[str] = []
     active: bool = True
