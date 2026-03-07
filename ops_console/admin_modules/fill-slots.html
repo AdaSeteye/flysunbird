@@ -33,9 +33,6 @@
         <label>Date</label>
         <input id="fillDate" type="date"/>
       </div>
-      <div>
-        <button class="btn" type="button" data-label="Load existing" onclick="loadExisting(this)">Load existing</button>
-      </div>
     </div>
   </div>
 
@@ -60,27 +57,9 @@
     </div>
     <div id="fillMsg" class="sub" style="margin-top:8px"></div>
   </div>
-
-  <div id="existingSection" class="card" style="display:none">
-    <div class="hrow">
-      <div style="font-weight:900">Existing slots for this route + date</div>
-    </div>
-    <div class="hr"></div>
-    <div style="overflow:auto">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>Time</th><th>Seats</th><th>Price (USD)</th><th>Flight</th><th>Cabin</th>
-          </tr>
-        </thead>
-        <tbody id="existingTbody"></tbody>
-      </table>
-    </div>
-  </div>
 </div>
 
 <script src="../admin_assets/ops_api.js"></script>
-<script src="../admin_assets/ops_inventory.js"></script>
 <script>
   if (window.parent === window && !localStorage.getItem("FSB_TOKEN") && !localStorage.getItem("FSB_API_BASE")) {
     window.location.replace(/admin_modules\//.test(window.location.pathname || "") ? "../login.html" : "login.html");
@@ -121,53 +100,12 @@
       const r = await window.OpsApi.fetch("GET", "/ops/route-by-labels?from_label=" + encodeURIComponent(fromLabel) + "&to_label=" + encodeURIComponent(toLabel));
       return r && r.id ? r.id : null;
     } catch (e) {
-      if (e.message && e.message.indexOf("404") !== -1) {
-        try {
-          const created = await window.OpsApi.fetch("POST", "/ops/routes?fromLabel=" + encodeURIComponent(fromLabel) + "&toLabel=" + encodeURIComponent(toLabel));
-          return created && created.id ? created.id : null;
-        } catch (e2) {
-          return null;
-        }
+      try {
+        const created = await window.OpsApi.fetch("POST", "/ops/routes?fromLabel=" + encodeURIComponent(fromLabel) + "&toLabel=" + encodeURIComponent(toLabel));
+        return created && created.id ? created.id : null;
+      } catch (e2) {
+        return null;
       }
-      return null;
-    }
-  }
-
-  async function loadExisting(btn) {
-    const fromLabel = (document.getElementById("fromSelect") && document.getElementById("fromSelect").value || "").trim();
-    const toLabel = (document.getElementById("toSelect") && document.getElementById("toSelect").value || "").trim();
-    const dateStr = document.getElementById("fillDate").value;
-    if (!fromLabel || !toLabel || !dateStr) {
-      alert("Select From, To, and Date first.");
-      return;
-    }
-    const routeId = await getRouteId(fromLabel, toLabel);
-    if (!routeId) {
-      alert("Could not find or create route for this From/To.");
-      return;
-    }
-    if (!routeId || !dateStr) {
-      alert("Select a route and date first.");
-      return;
-    }
-    if (btn) { btn.disabled = true; btn.textContent = "Loading…"; }
-    try {
-      const rows = await OpsInventory.listRemote(dateStr, routeId);
-      const tbody = document.getElementById("existingTbody");
-      const section = document.getElementById("existingSection");
-      if (!rows.length) {
-        tbody.innerHTML = "<tr><td colspan=\"5\" class=\"sub\">No existing slots for this route and date.</td></tr>";
-      } else {
-        const esc = window.FSB_esc || (s => (s == null || s === undefined ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;")));
-        tbody.innerHTML = rows.map(t =>
-          "<tr><td>" + esc(t.start || "") + " – " + esc(t.end || "") + "</td><td>" + esc(t.seats_available ?? 0) + "</td><td>$" + esc(t.price_usd ?? t.override_price_usd ?? 0) + "</td><td>" + esc(t.flight_no || "") + "</td><td>" + esc(t.cabin || "") + "</td></tr>"
-        ).join("");
-      }
-      section.style.display = "block";
-    } catch (e) {
-      alert(e.message || "Failed to load");
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || "Load existing"; }
     }
   }
 
@@ -253,11 +191,10 @@
     const msgEl = document.getElementById("fillMsg");
     try {
       const res = await window.OpsApi.fetch("POST", "/ops/slots/fill", { route_id: routeId, date_str: dateStr, slots });
-      let msg = "Created " + (res.created || 0) + " slot(s).";
-      if (res.skipped && res.skipped > 0) msg += " " + res.skipped + " slot(s) already existed (not created).";
+      var msg = "Created " + (res.created || 0) + " slot(s).";
+      if (res.skipped && res.skipped > 0) msg += " " + res.skipped + " slot(s) already exist (skipped).";
       msgEl.textContent = msg;
       msgEl.style.color = "";
-      if (res.created > 0) loadExisting();
     } catch (e) {
       var errMsg = "Save failed.";
       if (e && e.message) {
