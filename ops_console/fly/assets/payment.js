@@ -198,8 +198,7 @@ $("#payNow").addEventListener("click", async ()=>{
   }
 
   // Selcom: create order and redirect to Selcom payment page (mobile money / card).
-  {
-    try {
+  try {
       $("#payNow").disabled = true;
       $("#payNow").textContent = "Redirecting to Selcom…";
       if(!API_BASE){
@@ -231,10 +230,10 @@ $("#payNow").addEventListener("click", async ()=>{
     } catch(e){
       console.error(e);
       alert(e && e.message ? e.message : "Could not start Selcom payment.");
-    } finally {
-      $("#payNow").disabled = false;
-      $("#payNow").textContent = "Pay now";
-    }
+  } finally {
+    $("#payNow").disabled = false;
+    $("#payNow").textContent = "Pay now";
+  }
 });
 
 (async function init(){

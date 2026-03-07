@@ -24,15 +24,15 @@
         </div>
       </div>
 
-      <div class="pay-grid" style="margin-top:14px">
-        <div class="card" style="padding:16px">
-          <!-- SELCOM -->
-          <div class="pay-form" data-method="selcom" style="margin-top:14px">
+      <div style="margin-top:14px;display:flex;justify-content:center;flex-wrap:wrap;gap:16px">
+        <div class="card" style="padding:20px;max-width:420px;width:100%">
+          <div id="summary" style="margin-bottom:16px"></div>
+          <div class="pay-form" data-method="selcom">
             <div class="field-grid">
               <div class="field" style="grid-column:1/-1">
                 <label>Customer phone (mobile money number)</label>
                 <input class="input" id="selcomPhone" type="tel" inputmode="tel" placeholder="+255712345678" data-required="1">
-                <div class="hint sub" style="margin-top:4px">Valid Tanzania mobile number (e.g. 0712 345 678 or +255712345678). Random numbers will not work.</div>
+                <div class="hint sub" style="margin-top:4px">Valid Tanzania mobile number (e.g. 0712 345 678 or +255712345678).</div>
               </div>
               <div class="field">
                 <label>Channel</label>
@@ -47,18 +47,12 @@
                 <label>Invoice email (optional)</label>
                 <input class="input" type="email" placeholder="name@email.com" />
               </div>
-              <div class="hint" style="grid-column:1/-1">
-
-              </div>
             </div>
           </div>
-
-          <div class="pay-actions">
+          <div class="pay-actions" style="margin-top:16px">
             <button class="btn primary" id="payNow" type="button">Pay now</button>
           </div>
         </div>
-
-        <aside class="summary" id="summary"></aside>
       </div>
     </section>
   </main>
